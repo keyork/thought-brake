@@ -228,7 +228,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--workers", type=int, default=DEFAULT_WORKERS, help="Parallel API workers")
     p.add_argument(
         "--detector",
-        choices=["budget", "compression"],
+        choices=["budget", "compression", "keyword", "ngram", "semantic"],
         default="budget",
         help="Early-stop detector for non-baseline budgets",
     )

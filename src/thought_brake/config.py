@@ -61,6 +61,17 @@ class EarlyStopConfig:
     compression_theta_crd: float = 0.7
     compression_theta_lz: float = 0.5
     compression_consecutive_windows: int = 2
+    ngram_size: int = 4
+    ngram_window_chars: int = 200
+    ngram_threshold: float = 0.6
+    ngram_consecutive_windows: int = 2
+    keyword_window_chars: int = 300
+    keyword_trigger_threshold: float = 0.03
+    keyword_consecutive_windows: int = 2
+    semantic_window_chars: int = 200
+    semantic_jaccard_threshold: float = 0.35
+    semantic_consecutive_windows: int = 2
+    semantic_min_words: int = 5
     finalize_hint: str = "\n\n好，已经想清楚了，直接给出最终答案。"
     reasoning_start_tag: str = "hã\n"
     reasoning_end_tag: str = "\n boxed\n\n"
