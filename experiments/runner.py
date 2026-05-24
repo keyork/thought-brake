@@ -32,7 +32,7 @@ from experiments.config import (  # noqa: E402
     RESULT_SCHEMA_VERSION,
     RESULTS_DIR,
 )
-from experiments.datasets import gsm8k, riddles  # noqa: E402
+from experiments.datasets import gsm8k, mmlu, riddles  # noqa: E402
 from experiments.datasets.base import Question  # noqa: E402
 from experiments.evaluate import exact_match, llm_judge  # noqa: E402
 from thought_brake import EarlyStopConfig, ThoughtBrakeClient  # noqa: E402
@@ -216,7 +216,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="thought-brake experiment runner")
     p.add_argument(
         "--dataset",
-        choices=["riddles", "gsm8k", "all"],
+        choices=["riddles", "gsm8k", "mmlu", "all"],
         default="riddles",
     )
     p.add_argument(
@@ -258,6 +258,8 @@ def main() -> None:
         questions += riddles.load(difficulties=difficulties)
     if args.dataset in ("gsm8k", "all"):
         questions += gsm8k.load(n=args.n)
+    if args.dataset in ("mmlu", "all"):
+        questions += mmlu.load(n=args.n)
 
     output = Path(args.output) if args.output else RESULTS_DIR / f"{args.dataset}.jsonl"
     run_experiment(
