@@ -94,8 +94,11 @@ Reasoning model overthinking 的缓解方法可以分为四类：
 | detector | 说明 |
 |---|---|
 | `none` | 只监控不截断，用于 baseline 测量真实 reasoning 长度 |
-| `budget` | soft/hard 字符预算截断，当前主力 |
-| `compression` | CRD + LZ-rate 压缩信号原型 |
+| `budget` | soft/hard 字符预算截断，当前最优（95%） |
+| `compression` | CRD + LZ-rate 压缩信号（80%） |
+| `ngram` | n-gram literal overlap（80%） |
+| `keyword` | 犹豫短语密度，结论后触发（87.5%） |
+| `semantic` | 内容词 Jaccard 相似度（87.5%） |
 
 Detector 接口：
 
@@ -213,17 +216,19 @@ Direct 模式需要 API 支持禁用推理：
 - `clean_final_answer()` 后处理
 - Budget=300 达到 95% 质量保持率 + 72.5% 推理节省
 
-### Phase C：Detector 对照实验（进行中）
+### Phase C：Detector 对照实验 ✅
 
-- `budget` vs `compression`（CRD + LZ-rate）对照
-- 可选 n-gram repetition baseline
-- 在多数据集（riddles、GSM8K）上对比 savings / quality / false positive
+- 5 种 detector 对照：budget / compression / ngram / keyword / semantic
+- Budget 95%，keyword/semantic 87.5%，compression/ngram 80%
+- 关键发现：黑盒文本信号无法区分"合法复杂推理"和"过度思考"（hard 题全部 75%）
+- Overthinking 主要是语义重复（换词重述），不是 literal 重复
 
 ### Phase D：研究增强（规划中）
 
-- BOCPD on compression/LZ rate — 把手工阈值替换成有概率意义的参数
-- MDL / SPRT 停止判据
-- 问题分类路由 + 自适应预算
+- 组合信号：keyword + semantic composite，验证是否突破 hard=75%
+- Embedding-based 语义冗余检测（PUMA 路线）
+- Answer oscillation 检测（r=0.78 相关）
+- BOCPD on 文本信号序列
 
 详细研发路线见 [docs/idea.md](docs/idea.md)。
 
@@ -249,7 +254,7 @@ uv run python experiments/analysis.py \
 ## 测试
 
 ```bash
-uv run pytest              # 55 tests
+uv run pytest              # 63 tests
 uv run ruff check src tests
 uv run mypy src            # --strict
 ```
@@ -270,12 +275,12 @@ uv run mypy src            # --strict
 src/thought_brake/        核心库
   client.py               对外 Client，Phase 1/2 编排
   config.py               EarlyStopConfig dataclass
-  detectors.py            可插拔 detector（none/budget/compression）
+  detectors.py            可插拔 detector（none/budget/compression/ngram/keyword/semantic）
   _monitor.py             流式 reasoning 监控
   _prefill.py             Phase 2 direct + prefill 模式
   types.py                类型定义
   _utils.py               工具函数
-tests/                    55 个测试
+tests/                    63 个测试
 experiments/              实验 runner、数据集、评测和分析
   datasets/               riddles、GSM8K
   evaluate/               exact-match、LLM judge
