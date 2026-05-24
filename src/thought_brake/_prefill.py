@@ -44,6 +44,30 @@ def _extract_question(messages: list[ChatMessage]) -> str:
     return ""
 
 
+def _render_conversation(messages: list[ChatMessage], limit: int) -> str:
+    lines: list[str] = []
+    for msg in messages:
+        role = str(msg.get("role", "unknown"))
+        if role in {"system", "developer"}:
+            continue
+        content = str(msg.get("content", ""))
+        if content:
+            lines.append(f"{role}: {content}")
+
+    rendered = "\n".join(lines).strip()
+    if limit <= 0 or len(rendered) <= limit:
+        return rendered
+    return rendered[-limit:].lstrip()
+
+
+def _preserved_control_messages(messages: list[ChatMessage]) -> list[ChatMessage]:
+    return [
+        msg
+        for msg in messages
+        if msg.get("role") in {"system", "developer"}
+    ]
+
+
 def build_prefill_messages(
     original_messages: list[ChatMessage],
     partial_reasoning: str,
@@ -87,15 +111,21 @@ def build_direct_messages(
     config: EarlyStopConfig,
 ) -> list[ChatMessage]:
     question = _extract_question(original_messages)
+    conversation = _render_conversation(
+        original_messages, config.phase2_direct_conversation_chars
+    )
     excerpt = _compose_reasoning_excerpt(
         partial_reasoning,
         config.phase2_direct_head_chars,
         config.phase2_direct_tail_chars,
     )
     user_content = config.phase2_direct_template.format(
-        question=question, reasoning=excerpt
+        conversation=conversation, question=question, reasoning=excerpt
     )
-    return [{"role": "user", "content": user_content}]
+    return [
+        *_preserved_control_messages(original_messages),
+        {"role": "user", "content": user_content},
+    ]
 
 
 def clean_final_answer(content: str) -> str:
@@ -155,10 +185,15 @@ def run_prefill(
     if config.phase2_max_tokens > 0:
         phase2_kwargs["max_tokens"] = config.phase2_max_tokens
     if config.phase2_mode == "direct" and config.phase2_disable_thinking:
-        phase2_kwargs["extra_body"] = {
-            **phase2_kwargs.get("extra_body", {}),
-            "enable_thinking": False,
-        }
+        existing_extra_body = phase2_kwargs.get("extra_body", {})
+        if not isinstance(existing_extra_body, dict):
+            raise TypeError("extra_body must be a dict when Phase 2 direct mode is enabled")
+        phase2_extra_body = config.phase2_extra_body or {}
+        if existing_extra_body or phase2_extra_body:
+            phase2_kwargs["extra_body"] = {
+                **existing_extra_body,
+                **phase2_extra_body,
+            }
 
     create = cast(Any, client.chat.completions.create)
     with create(

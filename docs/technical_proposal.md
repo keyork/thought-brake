@@ -123,20 +123,21 @@ for chunk in stream(messages):
 
 #### 3.3.1 Direct 模式（推荐）
 
-**核心思路**：截断后发一条全新的 user 消息，附带原始问题和推理摘要，并通过 `enable_thinking=False` 禁用模型的推理阶段，直接生成最终答案。
+**核心思路**：截断后保留 system/developer 控制消息，再发一条全新的 user 消息，附带原始对话、当前问题和推理摘要；如果 LLM API 支持禁用推理，则通过配置化 `phase2_extra_body` 传入对应参数，直接生成最终答案。
 
 **Direct 构造**：
 
 ```
 messages = [
     {"role": "user", "content":
-        "以下是问题和已完成的思考过程。请直接给出最终答案，不需要再分析。\n\n"
-        "问题：<原始问题>\n\n"
+        "以下是原始对话、当前问题和已完成的思考过程。请直接给出最终答案，不需要再分析。\n\n"
+        "原始对话：\n<conversation>\n\n"
+        "问题：<当前问题>\n\n"
         "已完成的思考：\n<reasoning_excerpt>\n\n"
         "最终答案："
     }
 ]
-extra_body = {"enable_thinking": False}
+extra_body = <由 THOUGHT_BRAKE_PHASE2_EXTRA_BODY 配置>
 ```
 
 **推理摘要策略**：
@@ -149,10 +150,10 @@ extra_body = {"enable_thinking": False}
 
 | 维度 | Prefill | Direct |
 |---|---|---|
-| 推理泄漏 | 严重 — 模型不尊重注入的 `boxed`，从 prefill 继续推理 | 无 — `enable_thinking=False` 从根本上阻止推理 |
+| 推理泄漏 | 严重 — 模型不尊重注入的结束标签，从 prefill 继续推理 | 低 — 取决于 LLM API 是否支持禁用推理 |
 | 元评论 | 模型经常输出"我来分析一下"、"首先..."等元推理 | 极少 — 模型直接回答 |
 | 延迟 | 高（模型仍在 think） | 低（跳过 thinking 阶段） |
-| API 依赖 | 需要支持 assistant prefix continuation | 只需支持 `enable_thinking=False` |
+| API 依赖 | 需要支持 assistant prefix continuation | 最好支持禁用推理参数；字段名由配置决定 |
 
 **实验数据（riddles 数据集，20 题，budget sweep）**：
 
@@ -167,12 +168,7 @@ extra_body = {"enable_thinking": False}
 
 **API 兼容性**：
 
-| 模型 | 禁用推理参数 |
-|---|---|
-| GLM-5.x | `extra_body={"enable_thinking": False}` |
-| DeepSeek V4 | `extra_body={"thinking": {"type": "disabled"}}` |
-| Qwen hybrid | `extra_body={"enable_thinking": False}` |
-| R1, QWQ | 不支持禁用推理 — 必须使用 prefill 模式 |
+不同 LLM API 对“禁用推理”的字段约定不同。项目不在代码中绑定具体服务商，统一通过 `THOUGHT_BRAKE_PHASE2_EXTRA_BODY` 或 `EarlyStopConfig(phase2_extra_body=...)` 配置。若 API 不支持禁用推理，可把该配置置空并使用 `prefill` 模式。
 
 #### 3.3.2 Prefill 模式
 
@@ -184,15 +180,15 @@ extra_body = {"enable_thinking": False}
 messages = [
     {"role": "user", "content": <原始问题>},
     {"role": "assistant", "content": 
-        " boxed\n"
+        "<think>\n"
         + <partial_reasoning>           # Phase 1 已生成的推理
         + "\n\n好，已经想清楚了，直接给出最终答案。\n"
-        + "\n boxed\n\n"                # 显式关闭 think
+        + "\n</think>\n\n"             # 显式关闭 think
     }
 ]
 ```
 
-**已知问题**：prefill 模式在实践中表现不佳。模型不尊重注入的 `boxed` 标签，经常从 prefill 内容继续推理而非产出最终答案。仅在不支持 `enable_thinking=False` 的模型上使用。
+**已知问题**：prefill 模式在实践中表现不佳。模型可能不尊重注入的结束标签，经常从 prefill 内容继续推理而非产出最终答案。仅在 Direct 模式不可用时使用。
 
 **Hint 文本设计**（影响很大，按效果排序）：
 
@@ -200,7 +196,7 @@ messages = [
 |---|---|---|
 | `\n\n好,已经想清楚了,直接给出答案。` | ★★★★★ | 在 think 内部自然收束 |
 | `\n\n综上,` | ★★★★ | 强引导结论 |
-| ` boxed\n\n` 直接关闭 | ★★ | 部分模型会重开 thinking |
+| `</think>\n\n` 直接关闭 | ★★ | 部分模型会重开 thinking |
 | 不加 hint 直接关闭 | ★ | 容易续写出无关内容 |
 
 ### 3.4 数据流细节
@@ -239,8 +235,8 @@ messages = [
 
 不同模型/API 的 Phase 2 支持程度不同，按优先级尝试：
 
-1. **Direct 模式**（默认）：构造 user 消息 + `enable_thinking=False`，效果最好
-2. **Prefill 模式**：assistant 前缀续写，适用于不支持禁用推理的模型（R1, QWQ）
+1. **Direct 模式**（默认）：构造 user 消息 + 配置化禁用推理参数，效果最好
+2. **Prefill 模式**：assistant 前缀续写，适用于不支持禁用推理的 LLM API
 3. **Fallback**：把 partial_reasoning 拼到 user message 末尾，要求模型基于此总结
 
 ### 4.3 监控指标
@@ -270,7 +266,9 @@ class EarlyStopConfig:
     hard_limit: int = 600
     phase2_mode: Literal["prefill", "direct"] = "direct"
     phase2_disable_thinking: bool = True
+    phase2_extra_body: dict[str, Any] | None = {"enable_thinking": False}
     phase2_direct_template: str = "..."    # direct 模式 prompt 模板
+    phase2_direct_conversation_chars: int = 1200
     phase2_direct_head_chars: int = 150    # 推理摘要头部字符数
     phase2_direct_tail_chars: int = 200    # 推理摘要尾部字符数（仅长推理时使用）
     compression_baseline_chars: int = 200
@@ -347,7 +345,7 @@ needs_reasoning(question):
 | 风险 | 严重度 | 缓解措施 |
 |---|---|---|
 | 复杂推理被错误截断导致答错 | 高 | 分类路由 + 高预算 / 关闭早停 |
-| Direct 模式模型不支持 `enable_thinking=False` | 中 | 自动 fallback 到 prefill 模式 |
+| Direct 模式模型不支持禁用推理参数 | 中 | 配置为空并改用 prefill 模式 |
 | Prefill 注入被模型识破，输出元评论 | 中 | 优先使用 direct 模式；prefill 优化 hint 文本 |
 | 不同模型版本对 prefill 行为不同 | 中 | 模型升级时回归测试 |
 | 流式中断后服务端仍计费 | 低 | 与 LLM API 服务方确认计费规则 |

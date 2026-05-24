@@ -1,5 +1,6 @@
-from dataclasses import dataclass
-from typing import cast
+import json
+from dataclasses import dataclass, field
+from typing import Any, cast
 
 from .types import DetectorName, Phase2Mode
 
@@ -44,11 +45,39 @@ def _env_bool(name: str, default: bool) -> bool:
     raise ValueError(f"{name} must be a boolean value")
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = _env_str(name, str(default))
+    return float(raw)
+
+
 def _env_detector(name: str, default: DetectorName) -> DetectorName:
     raw = _env_str(name, default)
-    if raw in {"budget", "compression", "none"}:
+    if raw in {"budget", "compression", "keyword", "ngram", "semantic", "none"}:
         return cast(DetectorName, raw)
-    raise ValueError(f"{name} must be one of: budget, compression, none")
+    raise ValueError(
+        f"{name} must be one of: budget, compression, keyword, ngram, semantic, none"
+    )
+
+
+def _env_phase2_mode(name: str, default: Phase2Mode) -> Phase2Mode:
+    raw = _env_str(name, default)
+    if raw in {"prefill", "direct"}:
+        return cast(Phase2Mode, raw)
+    raise ValueError(f"{name} must be one of: prefill, direct")
+
+
+def _env_dict(name: str, default: dict[str, Any] | None) -> dict[str, Any] | None:
+    import os
+
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    if raw.strip() == "":
+        return None
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{name} must be a JSON object")
+    return cast(dict[str, Any], parsed)
 
 
 @dataclass
@@ -73,19 +102,24 @@ class EarlyStopConfig:
     semantic_consecutive_windows: int = 2
     semantic_min_words: int = 5
     finalize_hint: str = "\n\n好，已经想清楚了，直接给出最终答案。"
-    reasoning_start_tag: str = "hã\n"
-    reasoning_end_tag: str = "\n boxed\n\n"
+    reasoning_start_tag: str = "<think>\n"
+    reasoning_end_tag: str = "\n</think>\n\n"
     final_answer_prompt: str = (
         "只输出最终答案。不要复述推理过程，不要列分析步骤，不要提到你已经思考。"
     )
     phase2_mode: Phase2Mode = "direct"
     phase2_direct_template: str = (
-        "以下是问题和已完成的思考过程。请直接给出最终答案，不需要再分析。\n\n"
+        "以下是原始对话、当前问题和已完成的思考过程。请直接给出最终答案，不需要再分析。\n\n"
+        "原始对话：\n{conversation}\n\n"
         "问题：{question}\n\n"
         "已完成的思考：\n{reasoning}\n\n"
         "最终答案："
     )
     phase2_disable_thinking: bool = True
+    phase2_extra_body: dict[str, Any] | None = field(
+        default_factory=lambda: {"enable_thinking": False}
+    )
+    phase2_direct_conversation_chars: int = 1200
     phase2_direct_head_chars: int = 150
     phase2_direct_tail_chars: int = 200
     phase2_answer_prefix: str = ""
@@ -138,6 +172,40 @@ class EarlyStopConfig:
                 "THOUGHT_BRAKE_COMPRESSION_CONSECUTIVE_WINDOWS",
                 base.compression_consecutive_windows,
             ),
+            ngram_size=_env_int("THOUGHT_BRAKE_NGRAM_SIZE", base.ngram_size),
+            ngram_window_chars=_env_int(
+                "THOUGHT_BRAKE_NGRAM_WINDOW_CHARS", base.ngram_window_chars
+            ),
+            ngram_threshold=_env_float("THOUGHT_BRAKE_NGRAM_THRESHOLD", base.ngram_threshold),
+            ngram_consecutive_windows=_env_int(
+                "THOUGHT_BRAKE_NGRAM_CONSECUTIVE_WINDOWS",
+                base.ngram_consecutive_windows,
+            ),
+            keyword_window_chars=_env_int(
+                "THOUGHT_BRAKE_KEYWORD_WINDOW_CHARS", base.keyword_window_chars
+            ),
+            keyword_trigger_threshold=_env_float(
+                "THOUGHT_BRAKE_KEYWORD_TRIGGER_THRESHOLD",
+                base.keyword_trigger_threshold,
+            ),
+            keyword_consecutive_windows=_env_int(
+                "THOUGHT_BRAKE_KEYWORD_CONSECUTIVE_WINDOWS",
+                base.keyword_consecutive_windows,
+            ),
+            semantic_window_chars=_env_int(
+                "THOUGHT_BRAKE_SEMANTIC_WINDOW_CHARS", base.semantic_window_chars
+            ),
+            semantic_jaccard_threshold=_env_float(
+                "THOUGHT_BRAKE_SEMANTIC_JACCARD_THRESHOLD",
+                base.semantic_jaccard_threshold,
+            ),
+            semantic_consecutive_windows=_env_int(
+                "THOUGHT_BRAKE_SEMANTIC_CONSECUTIVE_WINDOWS",
+                base.semantic_consecutive_windows,
+            ),
+            semantic_min_words=_env_int(
+                "THOUGHT_BRAKE_SEMANTIC_MIN_WORDS", base.semantic_min_words
+            ),
             finalize_hint=_env_str("THOUGHT_BRAKE_FINALIZE_HINT", base.finalize_hint),
             reasoning_start_tag=_env_str(
                 "THOUGHT_BRAKE_REASONING_START_TAG", base.reasoning_start_tag
@@ -150,6 +218,40 @@ class EarlyStopConfig:
             ),
             clean_phase2_answer=_env_bool(
                 "THOUGHT_BRAKE_CLEAN_PHASE2_ANSWER", base.clean_phase2_answer
+            ),
+            phase2_mode=_env_phase2_mode("THOUGHT_BRAKE_PHASE2_MODE", base.phase2_mode),
+            phase2_direct_template=_env_str(
+                "THOUGHT_BRAKE_PHASE2_DIRECT_TEMPLATE", base.phase2_direct_template
+            ),
+            phase2_disable_thinking=_env_bool(
+                "THOUGHT_BRAKE_PHASE2_DISABLE_THINKING", base.phase2_disable_thinking
+            ),
+            phase2_extra_body=_env_dict(
+                "THOUGHT_BRAKE_PHASE2_EXTRA_BODY", base.phase2_extra_body
+            ),
+            phase2_direct_conversation_chars=_env_int(
+                "THOUGHT_BRAKE_PHASE2_DIRECT_CONVERSATION_CHARS",
+                base.phase2_direct_conversation_chars,
+            ),
+            phase2_direct_head_chars=_env_int(
+                "THOUGHT_BRAKE_PHASE2_DIRECT_HEAD_CHARS",
+                base.phase2_direct_head_chars,
+            ),
+            phase2_direct_tail_chars=_env_int(
+                "THOUGHT_BRAKE_PHASE2_DIRECT_TAIL_CHARS",
+                base.phase2_direct_tail_chars,
+            ),
+            phase2_answer_prefix=_env_str(
+                "THOUGHT_BRAKE_PHASE2_ANSWER_PREFIX", base.phase2_answer_prefix
+            ),
+            phase2_skip_user_prompt=_env_bool(
+                "THOUGHT_BRAKE_PHASE2_SKIP_USER_PROMPT", base.phase2_skip_user_prompt
+            ),
+            phase2_temperature=_env_float(
+                "THOUGHT_BRAKE_PHASE2_TEMPERATURE", base.phase2_temperature
+            ),
+            phase2_max_tokens=_env_int(
+                "THOUGHT_BRAKE_PHASE2_MAX_TOKENS", base.phase2_max_tokens
             ),
             sentence_end_pattern=_env_str(
                 "THOUGHT_BRAKE_SENTENCE_END_PATTERN", base.sentence_end_pattern

@@ -77,8 +77,9 @@ def test_build_direct_messages_extracts_last_user_message() -> None:
         {"role": "user", "content": "第二个问题"},
     ]
     msgs = build_direct_messages(original, "some reasoning", cfg)
-    assert "第二个问题" in msgs[0]["content"]
-    assert "第一个问题" not in msgs[0]["content"]
+    assert msgs[0] == {"role": "system", "content": "你是一个助手"}
+    assert "第二个问题" in msgs[1]["content"]
+    assert "第一个问题" in msgs[1]["content"]
 
 
 def test_run_prefill_collects_content() -> None:
@@ -117,6 +118,20 @@ def test_run_prefill_direct_mode_sends_single_user_message() -> None:
     assert sent_messages[0]["role"] == "user"
 
 
+def test_run_prefill_direct_mode_preserves_control_messages() -> None:
+    client = _mock_client([content_chunk("answer")])
+    cfg = EarlyStopConfig(phase2_mode="direct")
+    original = [
+        {"role": "system", "content": "answer in JSON"},
+        {"role": "user", "content": "q"},
+    ]
+    run_prefill(client, "model", original, "reasoning", cfg)
+
+    sent_messages = client.chat.completions.create.call_args.kwargs["messages"]
+    assert sent_messages[0] == {"role": "system", "content": "answer in JSON"}
+    assert sent_messages[1]["role"] == "user"
+
+
 def test_run_prefill_direct_mode_passes_enable_thinking_false() -> None:
     client = _mock_client([content_chunk("answer")])
     cfg = EarlyStopConfig(phase2_mode="direct")
@@ -124,6 +139,28 @@ def test_run_prefill_direct_mode_passes_enable_thinking_false() -> None:
 
     call_kwargs = client.chat.completions.create.call_args.kwargs
     assert call_kwargs["extra_body"]["enable_thinking"] is False
+
+
+def test_run_prefill_direct_mode_uses_configured_extra_body() -> None:
+    client = _mock_client([content_chunk("answer")])
+    cfg = EarlyStopConfig(
+        phase2_mode="direct",
+        phase2_extra_body={"thinking": {"type": "disabled"}},
+    )
+    run_prefill(
+        client,
+        "model",
+        [{"role": "user", "content": "q"}],
+        "reasoning",
+        cfg,
+        extra_body={"metadata": "keep"},
+    )
+
+    call_kwargs = client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["extra_body"] == {
+        "metadata": "keep",
+        "thinking": {"type": "disabled"},
+    }
 
 
 def test_run_prefill_direct_mode_no_thinking_flag_when_disabled() -> None:
@@ -135,6 +172,15 @@ def test_run_prefill_direct_mode_no_thinking_flag_when_disabled() -> None:
     assert "extra_body" not in call_kwargs or "enable_thinking" not in call_kwargs.get(
         "extra_body", {}
     )
+
+
+def test_run_prefill_direct_mode_omits_empty_extra_body() -> None:
+    client = _mock_client([content_chunk("answer")])
+    cfg = EarlyStopConfig(phase2_mode="direct", phase2_extra_body=None)
+    run_prefill(client, "model", [{"role": "user", "content": "q"}], "reasoning", cfg)
+
+    call_kwargs = client.chat.completions.create.call_args.kwargs
+    assert "extra_body" not in call_kwargs
 
 
 def test_run_prefill_default_does_not_set_temperature() -> None:

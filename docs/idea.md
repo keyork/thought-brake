@@ -92,7 +92,7 @@ class ReasoningDetector(Protocol):
 实现了 `direct` 模式替代原有 `prefill` 模式：
 
 1. 截断后发一条新 user 消息（含原始问题 + reasoning 摘要），不再用 assistant prefill
-2. 通过 `enable_thinking=False` 从根本上禁用 Phase 2 推理阶段
+2. 通过 LLM API 支持的禁用推理参数，从根本上禁用 Phase 2 推理阶段
 3. 推理摘要使用 head-only 策略（短推理时避免 head+tail 重叠噪音）
 4. `clean_final_answer()` 后处理去除元推理包装和尾部重复
 
@@ -107,8 +107,8 @@ class ReasoningDetector(Protocol):
 
 **关键发现**：
 
-- Prefill 模式在实践中失败：模型不尊重注入的 `boxed` 标签，继续推理
-- `enable_thinking=False` 是关键突破 — 彻底消除 reasoning 泄漏
+- Prefill 模式在实践中失败：模型不尊重注入的结束标签，继续推理
+- 配置化禁用推理参数是关键突破 — 显著减少 reasoning 泄漏
 - Head+tail 摘要在短推理（<400 chars）时有害，"……" 分隔符引入噪音
 - Budget=300 是 riddles 数据集的最优值（95% 质量保持率）
 
@@ -190,7 +190,7 @@ class ReasoningDetector(Protocol):
 验收：
 
 - ✅ 5 种 detector 实现，接口统一
-- ✅ 63 个测试全部通过
+- ✅ 68 个测试全部通过
 - ✅ 3 个数据集 × 4 种 detector × 3 个 budget = 36 组实验
 - ✅ 核心发现：没有万能最优，任务类型决定策略
 

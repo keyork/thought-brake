@@ -157,7 +157,7 @@ Important fields in each JSONL record:
 | `schema_version` | Result schema version; analysis keeps the latest version when mixed |
 | `question_id` | Dataset-local question id |
 | `budget` | Soft budget; `0` means baseline |
-| `detector` | `none`, `budget`, or `compression` |
+| `detector` | `none`, `budget`, `compression`, `ngram`, `keyword`, or `semantic` |
 | `reasoning_chars` | Collected reasoning character count |
 | `truncated` | Whether early stopping was triggered |
 | `stop_reason` | `natural`, `soft`, `hard`, or `interrupted` |
@@ -210,3 +210,7 @@ If GSM8K fails to import `datasets`, run:
 ```bash
 uv sync --dev --group experiments
 ```
+
+If Phase 2 direct mode needs a different no-thinking parameter for your LLM API,
+set `THOUGHT_BRAKE_PHASE2_EXTRA_BODY` to that API's JSON object. Set it to an
+empty value and use `--phase2 prefill` when the API cannot disable reasoning.

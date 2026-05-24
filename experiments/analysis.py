@@ -52,10 +52,13 @@ def compute_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
     cols = ["question_id", "category", "reasoning_chars", "quality_score"]
     baseline = df[df["budget"] == 0][cols]
-    baseline = baseline.rename(columns={
-        "reasoning_chars": "baseline_chars",
-        "quality_score": "baseline_quality",
-    })
+    baseline = (
+        baseline.groupby(["question_id", "category"], as_index=False)
+        .agg(
+            baseline_chars=("reasoning_chars", "mean"),
+            baseline_quality=("quality_score", "mean"),
+        )
+    )
 
     treated = df[df["budget"] > 0].copy()
     merged = treated.merge(baseline, on=["question_id", "category"], how="left")

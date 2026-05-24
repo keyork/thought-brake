@@ -6,8 +6,9 @@ and use exact_match evaluation.
 """
 
 import random
+from hashlib import sha1
 
-from experiments.config import DEFAULT_EXPERIMENT_N
+from experiments.config import DEFAULT_ENCODING, DEFAULT_EXPERIMENT_N
 
 from .base import Question
 
@@ -19,6 +20,11 @@ def _format_question(question: str, choices: list[str]) -> str:
     for label, choice in zip(_LABELS, choices):
         lines.append(f"{label}. {choice}")
     return "\n".join(lines)
+
+
+def _stable_question_id(subject: str, question: str) -> str:
+    digest = sha1(question.encode(DEFAULT_ENCODING)).hexdigest()[:10]
+    return f"mmlu_{subject}_{digest}"
 
 
 def load(
@@ -45,10 +51,9 @@ def load(
     questions = []
     for row in rows:
         answer_letter = _LABELS[row["answer"]]
-        q_hash = abs(hash(row["question"])) % 100000
         questions.append(
             Question(
-                id=f"mmlu_{row['subject']}_{q_hash:05d}",
+                id=_stable_question_id(row["subject"], row["question"]),
                 difficulty="medium",
                 category=row["subject"],
                 question=_format_question(row["question"], row["choices"]),
