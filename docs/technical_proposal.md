@@ -265,7 +265,7 @@ messages = [
 ```python
 @dataclass
 class EarlyStopConfig:
-    detector: Literal["none", "budget", "compression"] = "budget"
+    detector: Literal["none", "budget", "compression", "ngram", "keyword", "semantic"] = "budget"
     soft_budget: int = 300
     hard_limit: int = 600
     phase2_mode: Literal["prefill", "direct"] = "direct"
@@ -355,7 +355,7 @@ needs_reasoning(question):
 ### 6.2 不适用场景
 
 - **Agent 工作流**：每步推理可能依赖前序完整推理，截断风险高
-- **数学证明、定理推导**：完整推理链不可截断
+- **数学证明、定理推导**：完整推理链不可截断（注：GSM8K 常规计算题仍然适合早停）
 - **多步代码调试**：reasoning 即是解题过程本身
 - **LLM API 按 max_tokens 而非实际生成计费**：早停无成本收益
 
@@ -388,18 +388,21 @@ needs_reasoning(question):
 - 监控 `answer_chars` 和 answer length ratio
 - 对不同 LLM API 形态保留配置化 fallback
 
-### Phase C：Detector 对照实验
+### Phase C：Detector 对照实验 ✅
 
-- `budget`：soft/hard budget 基线
-- `compression`：CRD + LZ-rate Layer 1 原型
-- 可选 `ngram`：字面重复 baseline
-- 对比 savings、quality retention、false positive、latency
+- 5 种 detector：budget / compression / ngram / keyword / semantic
+- 跨 3 个数据集验证：riddles / GSM8K / MMLU
+- 核心结论：没有万能最优 detector，任务类型决定策略
+  - Riddles（推理短且均匀）→ budget@300 (95%)
+  - GSM8K（数学计算，中等长度）→ compression@1000 (90%)
+  - MMLU（推理长度 615-63806，分布极宽）→ compression@300 (100%)
 
-### Phase D：研究增强
+### Phase D：任务自适应路由（规划中）
 
-- BOCPD on compression/LZ rate
-- MDL / SPRT 停止判据探索
-- 问题分类路由和自适应预算
+- 基于问题特征自动选择 detector + budget
+- Hybrid detector：signal guard + budget fallback
+- Answer oscillation 检测（多选题）
+- BOCPD / embedding 研究增强
 
 ---
 

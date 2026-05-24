@@ -8,16 +8,33 @@ Reasoning model（如 DeepSeek-R1、Qwen-QWQ、GLM-5 等）在处理简单问题
 
 ## 实验结果
 
-Riddles 数据集（20 题，3 个难度），budget=300，direct 模式：
+### 跨数据集 Detector 对照（@300）
 
-| 指标 | 数值 |
-|---|---|
-| **质量保持率** | **95.0%**（easy 88.9% / medium 100% / hard 100%） |
-| **推理节省** | **72.5%**（avg 2077 chars → 317 chars） |
-| **延迟** | **0.90x** baseline（略低） |
-| **答案长度** | **0.19x** baseline（无推理泄漏，更简洁） |
+三个数据集，各 20 题，4 种 detector，budget=300，direct 模式：
 
-Budget sweep 对比：
+| Detector | Riddles | GSM8K | MMLU | Riddles 省 | GSM8K 省 | MMLU 省 |
+|---|---|---|---|---|---|---|
+| budget | **95.0%** | 70.0% | 95.0% | 66.2% | 80.4% | 75.7% |
+| compression | 80.0% | **80.0%** | **100%** | 37.3% | 64.5% | 69.0% |
+| keyword | 87.5% | 70.0% | **100%** | 34.2% | 64.2% | 68.9% |
+| semantic | 87.5% | 75.0% | 95.0% | 36.5% | 64.6% | 69.7% |
+
+**核心发现**：没有万能最优 detector。Riddles（推理短且均匀）→ budget 最优；GSM8K（数学计算）→ compression 最优；MMLU（推理长度 615-63806，分布极宽）→ compression/keyword 完胜。
+
+### MMLU 完整对照
+
+MMLU 推理长度分布极宽（avg 7176, max 63806），是信号 detector 自适应能力的终极测试：
+
+| Detector@Budget | 正确率 | 节省 | Short(<2k) | Med(2k-5k) | Long(>=5k) |
+|---|---|---|---|---|---|
+| budget@300 | 95.0% | 75.7% | 7/7 | 6/6 | 6/7 |
+| budget@1000 | 100% | 49.3% | 7/7 | 6/6 | 7/7 |
+| **compression@300** | **100%** | **69.0%** | **7/7** | **6/6** | **7/7** |
+| **keyword@300** | **100%** | **68.9%** | **7/7** | **6/6** | **7/7** |
+
+同样是 100% 正确率，compression@300 比 budget@1000 多省 20%。
+
+### Riddles Budget Sweep
 
 | Budget | Easy | Medium | Hard | 整体 | 推理节省 |
 |---|---|---|---|---|---|
@@ -219,16 +236,15 @@ Direct 模式需要 API 支持禁用推理：
 ### Phase C：Detector 对照实验 ✅
 
 - 5 种 detector 对照：budget / compression / ngram / keyword / semantic
-- Budget 95%，keyword/semantic 87.5%，compression/ngram 80%
-- 关键发现：黑盒文本信号无法区分"合法复杂推理"和"过度思考"（hard 题全部 75%）
-- Overthinking 主要是语义重复（换词重述），不是 literal 重复
+- 跨 3 个数据集（riddles / GSM8K / MMLU）× 3 个 budget（300/500/1000）
+- 核心发现：没有万能最优，任务类型决定策略。Budget 适合推理短且均匀的任务，信号 detector 适合推理长度分布宽的任务
 
-### Phase D：研究增强（规划中）
+### Phase D：任务自适应路由（规划中）
 
-- 组合信号：keyword + semantic composite，验证是否突破 hard=75%
-- Embedding-based 语义冗余检测（PUMA 路线）
-- Answer oscillation 检测（r=0.78 相关）
-- BOCPD on 文本信号序列
+- 任务分类路由：根据问题特征自动选择 detector + budget
+- Hybrid detector：signal guard + budget fallback
+- Answer oscillation 检测（对多选题特别适用）
+- BOCPD / embedding 作为研究增强
 
 详细研发路线见 [docs/idea.md](docs/idea.md)。
 
@@ -282,7 +298,7 @@ src/thought_brake/        核心库
   _utils.py               工具函数
 tests/                    63 个测试
 experiments/              实验 runner、数据集、评测和分析
-  datasets/               riddles、GSM8K
+  datasets/               riddles、GSM8K、MMLU
   evaluate/               exact-match、LLM judge
   runner.py               并发实验（断点续跑）
   analysis.py             结果分析 + 可视化

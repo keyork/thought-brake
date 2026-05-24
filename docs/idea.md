@@ -1,6 +1,6 @@
-# 未来工作方向：从可靠基线到压缩信号早停
+# 研发路线：从可靠基线到任务自适应早停
 
-本文档记录 `thought-brake` 后续研发路线。当前判断是：**客户端黑盒 LLM API 的流式早停方向合理，但必须先把实验基线和 Phase 2 输出质量做扎实，再推进压缩信号和 BOCPD/MDL。**
+本文档记录 `thought-brake` 研发路线。Phase C 跨数据集实验完成后的核心判断是：**没有"最优 detector"，只有"某个任务类型上的最优 detector"。下一步是任务自适应路由。**
 
 ## 1. 当前定位
 
@@ -58,7 +58,10 @@ class ReasoningDetector(Protocol):
 
 - `none`：baseline 监控，不截断
 - `budget`：soft/hard budget
-- `compression`：Layer 1 压缩信号原型
+- `compression`：CRD + LZ-rate 压缩信号
+- `ngram`：n-gram literal overlap
+- `keyword`：犹豫短语密度（结论后触发）
+- `semantic`：内容词 Jaccard 相似度
 
 ## 4. Roadmap
 
@@ -129,75 +132,111 @@ class ReasoningDetector(Protocol):
 | `keyword` | 犹豫短语密度（结论后触发） | `keyword_window_chars`, `keyword_trigger_threshold` |
 | `semantic` | 内容词 Jaccard 相似度 | `semantic_window_chars`, `semantic_jaccard_threshold` |
 
-**实验结果**（riddles 数据集，20 题，3 难度，budget=300，direct 模式）：
+#### 跨数据集实验结果
 
-| Detector | Easy | Medium | Hard | 整体 | Token Save | Latency |
-|---|---|---|---|---|---|---|
-| **budget** | **88.9%** | **100%** | **100%** | **95.0%** | 66.2% | 35s |
-| compression | 77.8% | 85.7% | 75.0% | 80.0% | 37.3% | 25s |
-| ngram | 77.8% | 85.7% | 75.0% | 80.0% | 33.3% | 21s |
-| keyword | 88.9% | 92.9% | 75.0% | 87.5% | 34.2% | 21s |
-| semantic | 83.3% | 100% | 75.0% | 87.5% | 36.5% | 17s |
+三个数据集，各 20 题，4 种 detector × 3 个 budget（300/500/1000），direct 模式：
 
-**关键发现**：
+**Detector@300 对照（最优 budget 点）**：
 
-1. **Budget 仍然最优（95%）**，但它是 magic number，没有语义理解
-2. **所有信号 detector 在 hard 题上都是 75%** — 系统性地在复杂推理上过早截断
-3. **Compression/ngram 只检测 literal 重复**，但模型 overthinking 主要是语义重复（换词重述同一论点），不是字面重复。实测 CRD > 1.0（新文本反而更难压缩）
-4. **Keyword detector（基于 SelfDoubt HVR）和 semantic detector（Jaccard）** 在 easy/medium 上接近 budget（87.5%），但 hard=75% 说明合法复杂推理中也会出现犹豫短语和语义重叠
-5. **Overthinking 的 5 种结构模式**：
-   - A. Arrive-Rethink-Reconfirm（~60%）— "但真的会这样吗？"
-   - B. Enumerate-then-Select（~25%）— "还有其他可能吗？"
-   - C. Explain-the-Explainer（~15%）— "组织回复..."
-   - D. Literal loops（<5%）— 唯一被 compression/ngram 捕获的模式
-   - E. Multi-angle re-argument（~30%）— 同一观点换词重复
+| Detector | Riddles | GSM8K | MMLU | 推理长度分布 |
+|---|---|---|---|---|
+| budget | **95.0%** (66%) | 70.0% (80%) | 95.0% (76%) | 短且均匀时好使 |
+| compression | 80.0% (37%) | **80.0%** (65%) | **100%** (69%) | 长且分散时碾压 |
+| keyword | 87.5% (34%) | 70.0% (64%) | **100%** (69%) | 长且分散时碾压 |
+| semantic | 87.5% (37%) | 75.0% (65%) | 95.0% (70%) | 稳定 |
 
-**核心结论**：
+*括号内为推理节省率。Baseline 全部 100%。*
 
-> 黑盒文本信号的天花板在于无法区分"复杂推理中的合理自我质疑"和"真正的过度思考"。Budget 绕过了这个问题（直接给足够空间），但 signal-based detector 需要更深的语义理解才能突破 75% hard 上限。
+**MMLU 完整对照（推理长度 615 - 63806 chars，avg 7176）**：
+
+| Detector@Budget | 正确率 | 节省 | Short(<2k) | Med(2k-5k) | Long(>=5k) |
+|---|---|---|---|---|---|
+| budget@300 | 95.0% | 75.7% | 7/7 | 6/6 | 6/7 |
+| budget@1000 | **100%** | 49.3% | 7/7 | 6/6 | 7/7 |
+| **compression@300** | **100%** | **69.0%** | 7/7 | 6/6 | 7/7 |
+| **keyword@300** | **100%** | **68.9%** | 7/7 | 6/6 | 7/7 |
+
+#### 关键发现
+
+**1. "最优 detector" 不存在，取决于任务类型**：
+
+| 数据集 | 最优 Detector@Budget | 原因 |
+|---|---|---|
+| Riddles (avg 2077) | budget@300 (95%) | 推理短且均匀，hard budget 足够 |
+| GSM8K (avg 1979) | signal@1000 (90%) | 数学推理中等长度，需等到重复 |
+| MMLU (avg 7176) | signal@300 (100%) | 长度极宽(615-63806)，必须自适应 |
+
+**2. Budget 的稳定性依赖任务推理长度分布**：
+- Riddles 和 MMLU 上 budget@300 都到 95%——但 MMLU 上 compression@300 达到 100%
+- GSM8K 上 budget 反常：@500 (65%) < @300 (70%)，不单调递增
+- Budget 本质上是"猜测推理需要多长"，猜错就伤质量
+
+**3. 信号 detector 的真正价值是"自适应"**：
+- 不需要预判推理长度——短的自然结束，长的等到重复才截
+- MMLU 上 compression@300 和 budget@1000 都是 100%，但 compression 省 69% vs budget 只省 49%
+- 同样 100% 正确率，信号 detector 多省 20%
+
+**4. Overthinking 的 5 种结构模式**（来自 riddles 分析）：
+- A. Arrive-Rethink-Reconfirm（~60%）— "但真的会这样吗？"
+- B. Enumerate-then-Select（~25%）— "还有其他可能吗？"
+- C. Explain-the-Explainer（~15%）— "组织回复..."
+- D. Literal loops（<5%）— 唯一被 compression/ngram 捕获的模式
+- E. Multi-angle re-argument（~30%）— 同一观点换词重复
+
+**5. "数学推理不适合早停"被推翻**：
+- GSM8K 上信号 detector@1000 达到 90%，还省 6.8%-25.9%
+- 数学推理的重复模式更规律（重复计算、反复列式），比脑筋急转弯更适合信号检测
 
 验收：
 
 - ✅ 5 种 detector 实现，接口统一
 - ✅ 63 个测试全部通过
-- ✅ Budget=95%, keyword/semantic=87.5%, compression/ngram=80%
-- ✅ 定位了信号 detector 的瓶颈（语义重复 vs literal 重复、hard 题误截断）
+- ✅ 3 个数据集 × 4 种 detector × 3 个 budget = 36 组实验
+- ✅ 核心发现：没有万能最优，任务类型决定策略
 
-### Phase D：研究增强（规划中）
+### Phase D：任务自适应路由（规划中）
 
-Phase C 的结论指向两个方向：
+Phase C 跨数据集实验表明：**没有万能最优 detector，任务类型决定策略。** 下一步的核心问题是：如何自动选择 detector + budget？
 
-#### 方向 1：组合信号 Composite Detector
+#### 方向 1：任务分类路由（最高优先级）
 
-单一信号的天花板是 87.5%（hard=75%）。组合多个信号可能突破：
-- keyword + semantic 双重确认：只在两个 detector 同时触发时才截断
-- Signal → confidence score：每个 detector 输出 [0,1] 置信度，加权组合
-- 问题难度自适应：根据前 N 个字符判断难度，调整阈值
+根据问题特征自动选择最优策略：
+- 短推理/均匀分布 → budget（简单快速）
+- 长推理/分布未知 → signal detector（自适应）
+- 实现方式：前 N 个字符判断问题类型，或用户显式指定任务类型
+- `EarlyStopConfig.for_task()` 已有预设，但当前只区分 chat/qa/math/complex
+- 需要根据实验数据更新预设值
 
-#### 方向 2：Embedding-based 语义冗余检测（PUMA 路线）
+#### 方向 2：Hybrid Detector — signal guard + budget fallback
 
-PUMA（arXiv:2605.17672）用 embedding 相似度检测语义冗余，实现 26.2% token 减少：
-- 用轻量 embedding 模型（如 text2vec）对滑动窗口做 embedding
+信号 detector 做主力，budget 做兜底：
+- 信号 detector 在 soft_budget 前不触发（warmup 期）
+- 超过 hard_limit 时强制截断（和现在一样）
+- 关键参数：soft_budget 和 hard_limit 的选择——实验表明这仍然依赖任务类型
+- 本质上是把"任务自适应"问题下推到了"参数选择"
+
+#### 方向 3：Embedding-based 语义冗余检测（PUMA 路线）
+
+PUMA（arXiv:2605.17672）用 embedding 相似度检测语义冗余：
+- 用轻量 embedding 模型对滑动窗口做 embedding
 - cosine similarity > θ → 语义重复
 - 优势：能检测换词重述（Pattern E），不受 literal overlap 限制
 - 代价：需要额外 embedding 模型调用或本地推理
-
-#### 方向 3：BOCPD on 文本信号
-
-BOCPD（Bayesian Online Changepoint Detection）仍是合理方向：
-- 不消除参数，但给参数概率意义
-- 把 CRD/Jaccard/hedge-density 作为观测序列，检测 changepoint
-- 适合在 Phase D 确认信号组合有效后推进
+- 当前优先级降低——信号 detector 已在 MMLU 上达到 100%，增量收益不确定
 
 #### 方向 4：Answer Oscillation 检测
 
 文献报告 answer oscillation 与 overthinking 的 r=0.78 相关：
 - 从 reasoning 中实时提取 candidate answer
 - 检测 answer 是否在多个选项间摇摆
-- 摇摆 = 还在推理，稳定 = 可以停止
-- 问题：需要问题类型感知（选择题 vs 开放问答）
+- 对多选题（MMLU）特别适用——可以直接监控 A/B/C/D 的出现频率
+- MMLU 上 keyword@300 已经 100%，但 oscillation 可能提供更优雅的信号
 
-**推荐优先级**：方向 1（组合信号）> 方向 2（embedding）> 方向 4（oscillation）> 方向 3（BOCPD）
+#### 方向 5：BOCPD on 文本信号
+
+优先级最低——跨数据集实验表明信号 detector 在合理 budget 下已经够用。BOCPD 的增量收益需要更强的证据。
+
+**推荐优先级**：方向 1（任务路由）> 方向 2（hybrid）> 方向 4（oscillation）> 方向 3（embedding）> 方向 5（BOCPD）
 
 ## 5. Compression Detector Layer 1
 
@@ -225,19 +264,20 @@ STOP if CRD < theta_crd OR LZ_ratio < theta_lz
 以下场景默认不应激进早停：
 
 - Agent 多步工作流
-- 数学证明、复杂推导
+- 数学证明、定理推导
 - 代码调试
 - 用户要求展示完整推理过程
 - LLM API 按 max tokens 而非实际生成计费
 
+注意：GSM8K 实验表明数学题的常规推理仍然适合早停（信号 detector@1000 达到 90%）。"数学推理不适合早停"只适用于完整推理链是输出本身的场景（如证明题）。
+
 ## 7. 当前优先级
 
-Phase A ✅ → Phase B ✅ → Phase C ✅ → Phase D 规划中
+Phase A ✅ → Phase B ✅ → Phase C ✅（跨数据集完成）→ Phase D 规划中
 
 下一步：
 
-1. **组合信号实验** — keyword + semantic composite detector，验证是否突破 hard=75%
-2. **Embedding baseline** — 用 text2vec 做 embedding 相似度检测，作为语义检测的 upper bound
-3. **跨数据集验证** — 在 GSM8K 上重跑 Phase C 对照，确认 riddles 结论是否泛化
-4. **参数调优** — 当前 keyword/semantic 参数是首次猜测，hard 题误截断可能通过更大 `min_history` 缓解
-5. **文献 claims 逐条核验**，再决定是否写论文/报告
+1. **任务分类路由** — 基于跨数据集结论，实现自动选择 detector + budget 的路由逻辑
+2. **更大数据集验证** — 当前每个数据集只有 20 题，扩大到 50-100 题确认结论稳定
+3. **Hybrid detector** — signal + budget 组合，验证是否在所有数据集上都优于单一策略
+4. **文献 claims 逐条核验**，再决定是否写论文/报告
