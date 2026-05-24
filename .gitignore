@@ -149,6 +149,8 @@ activemq-data/
 
 # Environments
 .env
+.env.*
+!.env.example
 .envrc
 .venv
 env/
@@ -203,8 +205,22 @@ cython_debug/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
 # Ruff stuff:
 .ruff_cache/
+
+# uv / local tool caches
+.uv-cache/
+uv-cache/
+
+# Local agent memory
+memory/
 
 # PyPI configuration file
 .pypirc
@@ -216,3 +232,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Experiment outputs
+experiments/results/
+experiments/report/
+experiments/**/*.tmp
+experiments/**/*.bak
