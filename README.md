@@ -291,24 +291,14 @@ THOUGHT_BRAKE_PHASE2_EXTRA_BODY='{"enable_thinking": false}'
 详见 [docs/experiments.md](docs/experiments.md)。
 
 ```bash
-# 10 并发运行 riddles 实验
-uv run python experiments/runner.py \
-  --dataset riddles \
-  --budgets 0,100,200,300,500 \
-  --detector budget \
-  --phase2 direct \
-  --workers 10
-
-# 生成分析报告
-uv run python experiments/analysis.py \
-  --input experiments/results/riddles.jsonl \
-  --output experiments/report/riddles_sweep
+# 25 并发运行主线 token 实验，并生成 focused report
+./experiments/run_token_main.sh
 ```
 
 ## 测试
 
 ```bash
-uv run pytest              # 68 tests
+uv run pytest              # 71 tests
 uv run ruff check src tests
 uv run mypy src            # --strict
 ```
@@ -334,7 +324,7 @@ src/thought_brake/        核心库
   _prefill.py             Phase 2 direct + prefill 模式
   types.py                类型定义
   _utils.py               工具函数
-tests/                    68 个测试
+tests/                    71 个测试
 experiments/              实验 runner、数据集、评测和分析
   datasets/               riddles、GSM8K、MMLU
   evaluate/               exact-match、LLM judge

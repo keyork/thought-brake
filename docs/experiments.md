@@ -26,7 +26,44 @@ THOUGHT_BRAKE_MODEL=your-reasoning-model
 
 Runtime tuning can stay on defaults for the first run. Change the detector, budget, prompt, tag, or fallback values in `.env` only when you need to compare different configurations.
 
-## 2. Run a Smoke Test
+## 2. Run the Clean Main Token Experiment
+
+This is the current recommended experiment entrypoint. It writes schema v3 rows
+with token fields and then builds the focused report.
+
+```bash
+./experiments/run_token_main.sh
+```
+
+Defaults:
+
+```text
+DATASET=all
+N=100
+BUDGETS=0,300,1000
+WORKERS=25
+PHASE2=direct
+```
+
+Outputs:
+
+```text
+experiments/results/full_budget.jsonl
+experiments/results/full_compression.jsonl
+experiments/results/full_keyword.jsonl
+experiments/report/full_main_token/report.md
+experiments/report/full_main_token/overall_tradeoff.png
+experiments/report/full_main_token/dataset_decision_matrix.png
+experiments/report/full_main_token/loss_vs_savings.png
+```
+
+Override values from the shell:
+
+```bash
+WORKERS=10 N=20 ./experiments/run_token_main.sh
+```
+
+## 3. Run a Smoke Test
 
 Run a small experiment without evaluation first. This checks credentials, streaming, early stopping, JSONL writing, and resume behavior.
 
@@ -36,6 +73,7 @@ uv run python experiments/runner.py \
   --budgets 0,100,200 \
   --difficulties easy \
   --workers 10 \
+  --track-usage \
   --skip-eval
 ```
 
@@ -48,7 +86,7 @@ experiments/results/riddles.jsonl
 Each row is one `(question, budget)` result. `budget=0` is the baseline with early stopping disabled.
 In the current schema, `budget=0` still uses streaming monitor with `detector="none"`, so baseline `reasoning_chars` is measurable.
 
-## 3. Run Riddle Experiments
+## 4. Run Riddle Experiments
 
 Run the default riddle sweep with 10 parallel API workers:
 
@@ -90,7 +128,7 @@ uv run python experiments/runner.py \
   --output experiments/results/riddles_compression.jsonl
 ```
 
-## 4. Run GSM8K Experiments
+## 5. Run GSM8K Experiments
 
 GSM8K requires the `experiments` dependency group because it loads from HuggingFace `datasets`.
 
@@ -113,7 +151,7 @@ uv run python experiments/runner.py \
   --skip-eval
 ```
 
-## 5. Run All Datasets
+## 6. Run All Datasets
 
 ```bash
 uv run python experiments/runner.py \
@@ -140,7 +178,7 @@ uv run python experiments/runner.py \
   --output experiments/results/all_10w.jsonl
 ```
 
-## 6. Resume Behavior
+## 7. Resume Behavior
 
 The runner is append-only and resumable.
 
@@ -148,7 +186,7 @@ Before starting, it scans the output JSONL once and skips any existing `(questio
 
 Do not run two separate runner processes against the same output file at the same time. Within one process, parallel workers are safe because only the main thread writes JSONL.
 
-## 7. Result Fields
+## 8. Result Fields
 
 Important fields in each JSONL record:
 
@@ -163,12 +201,34 @@ Important fields in each JSONL record:
 | `stop_reason` | `natural`, `soft`, `hard`, or `interrupted` |
 | `answer` | Final answer returned by the client |
 | `answer_chars` | Character length of the final answer |
+| `phase1_*_tokens` | API usage returned for Phase 1 when available |
+| `phase2_*_tokens` | API usage returned for Phase 2 when available |
+| `total_tokens` | Sum of API usage tokens when available |
+| `estimated_*_tokens` | Local token estimate, used when streaming usage is unavailable |
+| `token_usage_source` | `api`, `estimate`, or `none` |
 | `quality_score` | Evaluation score; `-1` when `--skip-eval` is used |
 | `latency_ms` | End-to-end request latency |
 | `phase2_used` | Whether Phase 2 prefill was used |
 | `phase2_failed` | Whether Phase 2 failed and fallback was used |
 
-## 8. Generate Reports
+## 9. Generate Reports
+
+For the clean main experiment, use the focused report:
+
+```bash
+uv run python experiments/report_full_main.py \
+  --inputs \
+    experiments/results/full_budget.jsonl \
+    experiments/results/full_compression.jsonl \
+    experiments/results/full_keyword.jsonl \
+  --output experiments/report/full_main_token
+```
+
+The older generic analysis is still useful for ad hoc files, but it should not be
+used for final conclusions if `experiments/results/` contains mixed historical
+JSONL files.
+
+### Generic Analysis
 
 After running evaluated experiments, generate tables and plots:
 
@@ -195,7 +255,7 @@ uv run python experiments/analysis.py \
   --output experiments/report/riddles
 ```
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 If requests are too slow, increase `--workers` up to the LLM API's rate limit. The default is 10.
 

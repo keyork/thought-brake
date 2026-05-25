@@ -19,6 +19,20 @@ class MockChoice:
 @dataclass
 class MockChunk:
     choices: list[MockChoice]
+    usage: Any | None = None
+
+
+@dataclass
+class MockUsage:
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    completion_tokens_details: Any | None = None
+
+
+@dataclass
+class MockCompletionTokensDetails:
+    reasoning_tokens: int | None = None
 
 
 def reasoning_chunk(text: str) -> MockChunk:
@@ -32,6 +46,23 @@ def reasoning_chunk(text: str) -> MockChunk:
 
 def content_chunk(text: str) -> MockChunk:
     return MockChunk(choices=[MockChoice(delta=MockDelta(content=text))])
+
+
+def usage_chunk(
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    reasoning_tokens: int | None = None,
+) -> MockChunk:
+    return MockChunk(
+        choices=[],
+        usage=MockUsage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            completion_tokens_details=MockCompletionTokensDetails(reasoning_tokens),
+        ),
+    )
 
 
 class MockStream:

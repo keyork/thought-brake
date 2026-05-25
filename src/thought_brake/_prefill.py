@@ -5,9 +5,15 @@ from typing import Any, cast
 
 from openai import OpenAI
 
-from ._utils import get_reasoning_content
+from ._utils import (
+    estimate_messages_tokens,
+    estimate_text_tokens,
+    get_reasoning_content,
+    get_usage,
+    usage_kwargs,
+)
 from .config import EarlyStopConfig
-from .types import ChatMessage
+from .types import ChatMessage, Phase2Result, TokenUsage
 
 _LEAK_START_RE = re.compile(
     r"^\s*(?:\d+[.)、]\s*)?(?:\*\*)?(?:分析请求|理解问题|识别问题|"
@@ -163,23 +169,25 @@ def clean_final_answer(content: str) -> str:
     return _deduplicate_tail(text)
 
 
-def run_prefill(
+def run_phase2(
     client: OpenAI,
     model: str,
     messages: list[ChatMessage],
     partial_reasoning: str,
     config: EarlyStopConfig,
     **api_kwargs: Any,
-) -> str:
+) -> Phase2Result:
     """Send the Phase 2 request and collect the model's final answer."""
     if config.phase2_mode == "direct":
         phase2_messages = build_direct_messages(messages, partial_reasoning, config)
     else:
         phase2_messages = build_prefill_messages(messages, partial_reasoning, config)
+    estimated_prompt_tokens = estimate_messages_tokens(phase2_messages)
 
     content_parts: list[str] = []
+    usage = None
 
-    phase2_kwargs: dict[str, Any] = {**api_kwargs}
+    phase2_kwargs: dict[str, Any] = usage_kwargs(config.track_token_usage, {**api_kwargs})
     if config.phase2_temperature >= 0:
         phase2_kwargs["temperature"] = config.phase2_temperature
     if config.phase2_max_tokens > 0:
@@ -203,6 +211,10 @@ def run_prefill(
         **phase2_kwargs,
     ) as stream:
         for chunk in stream:
+            chunk_usage = get_usage(chunk)
+            if chunk_usage is not None:
+                usage = chunk_usage
+
             try:
                 delta = chunk.choices[0].delta
             except (IndexError, AttributeError):
@@ -218,4 +230,24 @@ def run_prefill(
                 content_parts.append(leftover)
 
     raw = "".join(content_parts)
-    return clean_final_answer(raw) if config.clean_phase2_answer else raw
+    content = clean_final_answer(raw) if config.clean_phase2_answer else raw
+    estimated_completion_tokens = estimate_text_tokens(content)
+    return Phase2Result(
+        content=content,
+        usage=usage or TokenUsage(),
+        estimated_prompt_tokens=estimated_prompt_tokens,
+        estimated_completion_tokens=estimated_completion_tokens,
+        estimated_total_tokens=estimated_prompt_tokens + estimated_completion_tokens,
+    )
+
+
+def run_prefill(
+    client: OpenAI,
+    model: str,
+    messages: list[ChatMessage],
+    partial_reasoning: str,
+    config: EarlyStopConfig,
+    **api_kwargs: Any,
+) -> str:
+    """Backward-compatible wrapper that returns only the final answer."""
+    return run_phase2(client, model, messages, partial_reasoning, config, **api_kwargs).content

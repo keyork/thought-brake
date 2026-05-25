@@ -8,7 +8,7 @@ from thought_brake._monitor import stream_and_monitor
 from thought_brake.config import EarlyStopConfig
 from thought_brake.types import StopReason
 
-from .conftest import FailingStream, MockStream, content_chunk, reasoning_chunk
+from .conftest import FailingStream, MockStream, content_chunk, reasoning_chunk, usage_chunk
 
 
 def _mock_client(chunks):
@@ -77,6 +77,26 @@ def test_no_stop_detector_collects_full_baseline_reasoning() -> None:
     assert result.stop_reason == StopReason.NATURAL
     assert result.reasoning == "12345678901"
     assert result.content == "answer"
+
+
+def test_stream_usage_is_collected_when_enabled() -> None:
+    cfg = EarlyStopConfig(track_token_usage=True)
+    client = _mock_client(
+        [
+            reasoning_chunk("think"),
+            content_chunk("answer"),
+            usage_chunk(10, 20, 30, reasoning_tokens=15),
+        ]
+    )
+
+    result = stream_and_monitor(client, "model", [], cfg)
+
+    call_kwargs = client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["stream_options"] == {"include_usage": True}
+    assert result.usage.prompt_tokens == 10
+    assert result.usage.completion_tokens == 20
+    assert result.usage.total_tokens == 30
+    assert result.usage.reasoning_tokens == 15
 
 
 def test_initial_network_error_propagates() -> None:

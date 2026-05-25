@@ -190,7 +190,7 @@ class ReasoningDetector(Protocol):
 验收：
 
 - ✅ 5 种 detector 实现，接口统一
-- ✅ 68 个测试全部通过
+- ✅ 71 个测试全部通过
 - ✅ 3 个数据集 × 4 种 detector × 3 个 budget = 36 组实验
 - ✅ 核心发现：没有万能最优，任务类型决定策略
 

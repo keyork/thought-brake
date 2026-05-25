@@ -7,11 +7,12 @@ from thought_brake._prefill import (
     build_direct_messages,
     build_prefill_messages,
     clean_final_answer,
+    run_phase2,
     run_prefill,
 )
 from thought_brake.config import EarlyStopConfig
 
-from .conftest import MockStream, content_chunk, reasoning_chunk
+from .conftest import MockStream, content_chunk, reasoning_chunk, usage_chunk
 
 
 def _mock_client(chunks):
@@ -86,6 +87,22 @@ def test_run_prefill_collects_content() -> None:
     chunks = [content_chunk("Final answer here.")]
     result = run_prefill(_mock_client(chunks), "model", [], "reasoning", EarlyStopConfig())
     assert result == "Final answer here."
+
+
+def test_run_phase2_collects_usage_when_enabled() -> None:
+    chunks = [content_chunk("Final answer here."), usage_chunk(11, 22, 33, 9)]
+    cfg = EarlyStopConfig(track_token_usage=True)
+    client = _mock_client(chunks)
+
+    result = run_phase2(client, "model", [], "reasoning", cfg)
+
+    call_kwargs = client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["stream_options"] == {"include_usage": True}
+    assert result.content == "Final answer here."
+    assert result.usage.prompt_tokens == 11
+    assert result.usage.completion_tokens == 22
+    assert result.usage.total_tokens == 33
+    assert result.usage.reasoning_tokens == 9
 
 
 def test_run_prefill_treats_leftover_reasoning_as_content() -> None:

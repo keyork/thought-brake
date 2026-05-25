@@ -4,10 +4,10 @@ from typing import Any, cast
 
 from openai import OpenAI
 
-from ._utils import get_reasoning_content
+from ._utils import get_reasoning_content, get_usage, usage_kwargs
 from .config import EarlyStopConfig
 from .detectors import ReasoningDetector, build_detector
-from .types import ChatMessage, Phase1Result, StopReason
+from .types import ChatMessage, Phase1Result, StopReason, TokenUsage
 
 
 def stream_and_monitor(
@@ -30,16 +30,22 @@ def stream_and_monitor(
     reasoning_chars = 0
     stop_reason = StopReason.NATURAL
     active_detector = detector or build_detector(config)
+    usage = None
 
     try:
         create = cast(Any, client.chat.completions.create)
+        request_kwargs = usage_kwargs(config.track_token_usage, {**api_kwargs})
         with create(
             model=model,
             messages=messages,
             stream=True,
-            **api_kwargs,
+            **request_kwargs,
         ) as stream:
             for chunk in stream:
+                chunk_usage = get_usage(chunk)
+                if chunk_usage is not None:
+                    usage = chunk_usage
+
                 try:
                     delta = chunk.choices[0].delta
                 except (IndexError, AttributeError):
@@ -73,4 +79,5 @@ def stream_and_monitor(
         reasoning="".join(reasoning_buf),
         content="".join(content_buf),
         stop_reason=stop_reason,
+        usage=usage or TokenUsage(),
     )

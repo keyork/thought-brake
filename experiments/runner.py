@@ -55,6 +55,26 @@ class Record:
     stop_reason: str
     answer: str
     answer_chars: int
+    phase1_prompt_tokens: int | None
+    phase1_completion_tokens: int | None
+    phase1_total_tokens: int | None
+    phase1_reasoning_tokens: int | None
+    phase2_prompt_tokens: int | None
+    phase2_completion_tokens: int | None
+    phase2_total_tokens: int | None
+    phase2_reasoning_tokens: int | None
+    total_prompt_tokens: int | None
+    total_completion_tokens: int | None
+    total_tokens: int | None
+    total_reasoning_tokens: int | None
+    estimated_phase1_prompt_tokens: int | None
+    estimated_phase1_completion_tokens: int | None
+    estimated_phase1_total_tokens: int | None
+    estimated_phase2_prompt_tokens: int | None
+    estimated_phase2_completion_tokens: int | None
+    estimated_phase2_total_tokens: int | None
+    estimated_total_tokens: int | None
+    token_usage_source: str
     quality_score: float      # vs ground truth; -1 if evaluation skipped
     latency_ms: float
     phase2_used: bool
@@ -75,14 +95,21 @@ def _run_one(
     budget: int,
     detector: DetectorName,
     phase2_mode: Phase2Mode = "prefill",
+    track_usage: bool = False,
 ) -> Record:
     cfg = (
         EarlyStopConfig(detector="none")
         if budget == BASELINE_BUDGET
         else EarlyStopConfig(
-            detector=detector, soft_budget=budget, hard_limit=budget * 2, phase2_mode=phase2_mode
+            detector=detector,
+            soft_budget=budget,
+            hard_limit=budget * 2,
+            phase2_mode=phase2_mode,
+            track_token_usage=track_usage,
         )
     )
+    if budget == BASELINE_BUDGET:
+        cfg.track_token_usage = track_usage
 
     t0 = time.monotonic()
     resp = client.chat(
@@ -104,6 +131,26 @@ def _run_one(
         stop_reason=resp.metrics.stop_reason.value,
         answer=resp.content,
         answer_chars=len(resp.content),
+        phase1_prompt_tokens=resp.metrics.phase1_prompt_tokens,
+        phase1_completion_tokens=resp.metrics.phase1_completion_tokens,
+        phase1_total_tokens=resp.metrics.phase1_total_tokens,
+        phase1_reasoning_tokens=resp.metrics.phase1_reasoning_tokens,
+        phase2_prompt_tokens=resp.metrics.phase2_prompt_tokens,
+        phase2_completion_tokens=resp.metrics.phase2_completion_tokens,
+        phase2_total_tokens=resp.metrics.phase2_total_tokens,
+        phase2_reasoning_tokens=resp.metrics.phase2_reasoning_tokens,
+        total_prompt_tokens=resp.metrics.total_prompt_tokens,
+        total_completion_tokens=resp.metrics.total_completion_tokens,
+        total_tokens=resp.metrics.total_tokens,
+        total_reasoning_tokens=resp.metrics.total_reasoning_tokens,
+        estimated_phase1_prompt_tokens=resp.metrics.estimated_phase1_prompt_tokens,
+        estimated_phase1_completion_tokens=resp.metrics.estimated_phase1_completion_tokens,
+        estimated_phase1_total_tokens=resp.metrics.estimated_phase1_total_tokens,
+        estimated_phase2_prompt_tokens=resp.metrics.estimated_phase2_prompt_tokens,
+        estimated_phase2_completion_tokens=resp.metrics.estimated_phase2_completion_tokens,
+        estimated_phase2_total_tokens=resp.metrics.estimated_phase2_total_tokens,
+        estimated_total_tokens=resp.metrics.estimated_total_tokens,
+        token_usage_source=resp.metrics.token_usage_source,
         quality_score=-1.0,
         latency_ms=latency_ms,
         phase2_used=resp.metrics.phase2_used,
@@ -134,9 +181,10 @@ def _run_and_evaluate(
     detector: DetectorName,
     skip_eval: bool,
     phase2_mode: Phase2Mode = "prefill",
+    track_usage: bool = False,
 ) -> Record:
     client = _get_worker_client()
-    record = _run_one(client, question, budget, detector, phase2_mode)
+    record = _run_one(client, question, budget, detector, phase2_mode, track_usage)
     if not skip_eval:
         record.quality_score = _evaluate(client, question, record)
     return record
@@ -166,6 +214,7 @@ def run_experiment(
     workers: int = DEFAULT_WORKERS,
     detector: DetectorName = "budget",
     phase2_mode: Phase2Mode = "prefill",
+    track_usage: bool = False,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -185,7 +234,12 @@ def run_experiment(
                 for question, budget in pending:
                     pbar.set_postfix(q=question.id, budget=budget)
                     record = _run_and_evaluate(
-                        question, budget, detector, skip_eval, phase2_mode
+                        question,
+                        budget,
+                        detector,
+                        skip_eval,
+                        phase2_mode,
+                        track_usage,
                     )
                     out.write(json.dumps(asdict(record), ensure_ascii=False) + "\n")
                     out.flush()
@@ -194,7 +248,13 @@ def run_experiment(
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     futures = {
                         executor.submit(
-                            _run_and_evaluate, question, budget, detector, skip_eval, phase2_mode
+                            _run_and_evaluate,
+                            question,
+                            budget,
+                            detector,
+                            skip_eval,
+                            phase2_mode,
+                            track_usage,
                         ): (question, budget)
                         for question, budget in pending
                     }
@@ -208,7 +268,8 @@ def run_experiment(
 
     print(
         f"\nResults saved to {output_path} "
-        f"({max_workers} workers, detector={detector}, phase2={phase2_mode})"
+        f"({max_workers} workers, detector={detector}, phase2={phase2_mode}, "
+        f"track_usage={track_usage})"
     )
 
 
@@ -240,6 +301,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--skip-eval", action="store_true", help="Skip quality evaluation")
     p.add_argument(
+        "--track-usage",
+        action="store_true",
+        help="Request streaming token usage from the LLM API and write token fields",
+    )
+    p.add_argument(
         "--phase2",
         choices=["prefill", "direct"],
         default="prefill",
@@ -270,6 +336,7 @@ def main() -> None:
         workers=args.workers,
         detector=args.detector,
         phase2_mode=args.phase2,
+        track_usage=args.track_usage,
     )
 
 

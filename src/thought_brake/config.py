@@ -131,6 +131,7 @@ class EarlyStopConfig:
     fallback_excerpt_chars: int = 300
     fallback_assistant_template: str = "[已思考]: {reasoning}..."
     fallback_user_prompt: str = "请直接给出最终答案，简明扼要。"
+    track_token_usage: bool = False
     enable: bool = True
     fallback_on_phase2_fail: bool = True
 
@@ -265,6 +266,9 @@ class EarlyStopConfig:
             ),
             fallback_user_prompt=_env_str(
                 "THOUGHT_BRAKE_FALLBACK_USER_PROMPT", base.fallback_user_prompt
+            ),
+            track_token_usage=_env_bool(
+                "THOUGHT_BRAKE_TRACK_TOKEN_USAGE", base.track_token_usage
             ),
             enable=_env_bool("THOUGHT_BRAKE_ENABLE", base.enable),
             fallback_on_phase2_fail=_env_bool(

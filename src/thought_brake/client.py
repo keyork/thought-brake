@@ -5,9 +5,30 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from ._monitor import stream_and_monitor
-from ._prefill import run_prefill
+from ._prefill import run_phase2
+from ._utils import estimate_messages_tokens, estimate_text_tokens, get_usage
 from .config import EarlyStopConfig
 from .types import ChatMessage, ChatResponse, RequestMetrics, StopReason
+
+
+def _sum_optional(a: int | None, b: int | None) -> int | None:
+    if a is None and b is None:
+        return None
+    return (a or 0) + (b or 0)
+
+
+def _sum_exact(a: int | None, b: int | None) -> int | None:
+    if a is None or b is None:
+        return None
+    return a + b
+
+
+def _usage_source(api_total: int | None, estimated_total: int | None) -> str:
+    if api_total is not None:
+        return "api"
+    if estimated_total is not None:
+        return "estimate"
+    return "none"
 
 
 class ThoughtBrakeClient:
@@ -81,9 +102,31 @@ class ThoughtBrakeClient:
 
         # Phase 1 --------------------------------------------------------
         phase1 = stream_and_monitor(self._openai, self.model, messages, cfg, **api_kwargs)
+        estimated_phase1_prompt_tokens = estimate_messages_tokens(messages)
+        estimated_phase1_completion_tokens = estimate_text_tokens(
+            phase1.reasoning + phase1.content
+        )
+        estimated_phase1_total_tokens = (
+            estimated_phase1_prompt_tokens + estimated_phase1_completion_tokens
+        )
         metrics = RequestMetrics(
             reasoning_chars=len(phase1.reasoning),
             stop_reason=phase1.stop_reason,
+            phase1_prompt_tokens=phase1.usage.prompt_tokens,
+            phase1_completion_tokens=phase1.usage.completion_tokens,
+            phase1_total_tokens=phase1.usage.total_tokens,
+            phase1_reasoning_tokens=phase1.usage.reasoning_tokens,
+            estimated_phase1_prompt_tokens=estimated_phase1_prompt_tokens,
+            estimated_phase1_completion_tokens=estimated_phase1_completion_tokens,
+            estimated_phase1_total_tokens=estimated_phase1_total_tokens,
+            estimated_total_tokens=estimated_phase1_total_tokens,
+        )
+        metrics.total_prompt_tokens = phase1.usage.prompt_tokens
+        metrics.total_completion_tokens = phase1.usage.completion_tokens
+        metrics.total_tokens = phase1.usage.total_tokens
+        metrics.total_reasoning_tokens = phase1.usage.reasoning_tokens
+        metrics.token_usage_source = _usage_source(
+            phase1.usage.total_tokens, estimated_phase1_total_tokens
         )
 
         if phase1.stop_reason == StopReason.NATURAL:
@@ -96,8 +139,34 @@ class ThoughtBrakeClient:
         # Phase 2 --------------------------------------------------------
         metrics.phase2_used = True
         try:
-            content = run_prefill(
+            phase2 = run_phase2(
                 self._openai, self.model, messages, phase1.reasoning, cfg, **api_kwargs
+            )
+            content = phase2.content
+            metrics.phase2_prompt_tokens = phase2.usage.prompt_tokens
+            metrics.phase2_completion_tokens = phase2.usage.completion_tokens
+            metrics.phase2_total_tokens = phase2.usage.total_tokens
+            metrics.phase2_reasoning_tokens = phase2.usage.reasoning_tokens
+            metrics.estimated_phase2_prompt_tokens = phase2.estimated_prompt_tokens
+            metrics.estimated_phase2_completion_tokens = phase2.estimated_completion_tokens
+            metrics.estimated_phase2_total_tokens = phase2.estimated_total_tokens
+            metrics.estimated_total_tokens = _sum_optional(
+                estimated_phase1_total_tokens, phase2.estimated_total_tokens
+            )
+            metrics.total_prompt_tokens = _sum_exact(
+                phase1.usage.prompt_tokens, phase2.usage.prompt_tokens
+            )
+            metrics.total_completion_tokens = _sum_exact(
+                phase1.usage.completion_tokens, phase2.usage.completion_tokens
+            )
+            metrics.total_tokens = _sum_exact(
+                phase1.usage.total_tokens, phase2.usage.total_tokens
+            )
+            metrics.total_reasoning_tokens = _sum_exact(
+                phase1.usage.reasoning_tokens, phase2.usage.reasoning_tokens
+            )
+            metrics.token_usage_source = _usage_source(
+                metrics.total_tokens, metrics.estimated_total_tokens
             )
             if not content:
                 raise RuntimeError("Phase 2 returned empty content")
@@ -125,10 +194,29 @@ class ThoughtBrakeClient:
             messages=messages,
             **api_kwargs,
         )
+        usage = get_usage(resp)
+        estimated_prompt_tokens = estimate_messages_tokens(messages)
+        estimated_completion_tokens = estimate_text_tokens(resp.choices[0].message.content or "")
+        estimated_total_tokens = estimated_prompt_tokens + estimated_completion_tokens
         return ChatResponse(
             content=resp.choices[0].message.content or "",
             reasoning="",
-            metrics=RequestMetrics(stop_reason=StopReason.NATURAL),
+            metrics=RequestMetrics(
+                stop_reason=StopReason.NATURAL,
+                phase1_prompt_tokens=usage.prompt_tokens if usage else None,
+                phase1_completion_tokens=usage.completion_tokens if usage else None,
+                phase1_total_tokens=usage.total_tokens if usage else None,
+                total_prompt_tokens=usage.prompt_tokens if usage else None,
+                total_completion_tokens=usage.completion_tokens if usage else None,
+                total_tokens=usage.total_tokens if usage else None,
+                estimated_phase1_prompt_tokens=estimated_prompt_tokens,
+                estimated_phase1_completion_tokens=estimated_completion_tokens,
+                estimated_phase1_total_tokens=estimated_total_tokens,
+                estimated_total_tokens=estimated_total_tokens,
+                token_usage_source=_usage_source(
+                    usage.total_tokens if usage else None, estimated_total_tokens
+                ),
+            ),
         )
 
     def _fallback(

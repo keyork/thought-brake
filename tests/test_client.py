@@ -7,7 +7,7 @@ import pytest
 
 from thought_brake import EarlyStopConfig, StopReason, ThoughtBrakeClient
 
-from .conftest import FailingStream, MockStream, content_chunk, reasoning_chunk
+from .conftest import FailingStream, MockStream, content_chunk, reasoning_chunk, usage_chunk
 
 
 def _make_client(cfg: EarlyStopConfig | None = None) -> ThoughtBrakeClient:
@@ -95,6 +95,37 @@ def test_phase2_failure_triggers_fallback() -> None:
 
     assert resp.content == "fallback answer"
     assert resp.metrics.phase2_failed
+
+
+def test_token_usage_metrics_are_combined_across_phases() -> None:
+    cfg = EarlyStopConfig(
+        soft_budget=5,
+        hard_limit=100,
+        track_token_usage=True,
+    )
+    client = _make_client(cfg)
+
+    phase1_chunks = [
+        usage_chunk(10, 20, 30, reasoning_tokens=18),
+        reasoning_chunk("12345。"),
+    ]
+    phase2_chunks = [
+        content_chunk("phase2 answer"),
+        usage_chunk(40, 5, 45, reasoning_tokens=0),
+    ]
+    client._openai.chat.completions.create.side_effect = [
+        MockStream(phase1_chunks),
+        MockStream(phase2_chunks),
+    ]
+
+    resp = client.chat([{"role": "user", "content": "q"}])
+
+    assert resp.metrics.phase1_total_tokens == 30
+    assert resp.metrics.phase2_total_tokens == 45
+    assert resp.metrics.total_prompt_tokens == 50
+    assert resp.metrics.total_completion_tokens == 25
+    assert resp.metrics.total_tokens == 75
+    assert resp.metrics.total_reasoning_tokens == 18
 
 
 def test_fallback_prompt_uses_configured_template() -> None:

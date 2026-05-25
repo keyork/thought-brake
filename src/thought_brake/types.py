@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -15,10 +15,28 @@ class StopReason(StrEnum):
 
 
 @dataclass
+class TokenUsage:
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    reasoning_tokens: int | None = None
+
+
+@dataclass
 class Phase1Result:
     reasoning: str
     content: str  # non-empty only when stop_reason is NATURAL
     stop_reason: StopReason
+    usage: TokenUsage = field(default_factory=TokenUsage)
+
+
+@dataclass
+class Phase2Result:
+    content: str
+    usage: TokenUsage = field(default_factory=TokenUsage)
+    estimated_prompt_tokens: int | None = None
+    estimated_completion_tokens: int | None = None
+    estimated_total_tokens: int | None = None
 
 
 @dataclass
@@ -27,6 +45,26 @@ class RequestMetrics:
     stop_reason: StopReason = StopReason.NATURAL
     phase2_used: bool = False
     phase2_failed: bool = False
+    phase1_prompt_tokens: int | None = None
+    phase1_completion_tokens: int | None = None
+    phase1_total_tokens: int | None = None
+    phase1_reasoning_tokens: int | None = None
+    phase2_prompt_tokens: int | None = None
+    phase2_completion_tokens: int | None = None
+    phase2_total_tokens: int | None = None
+    phase2_reasoning_tokens: int | None = None
+    total_prompt_tokens: int | None = None
+    total_completion_tokens: int | None = None
+    total_tokens: int | None = None
+    total_reasoning_tokens: int | None = None
+    estimated_phase1_prompt_tokens: int | None = None
+    estimated_phase1_completion_tokens: int | None = None
+    estimated_phase1_total_tokens: int | None = None
+    estimated_phase2_prompt_tokens: int | None = None
+    estimated_phase2_completion_tokens: int | None = None
+    estimated_phase2_total_tokens: int | None = None
+    estimated_total_tokens: int | None = None
+    token_usage_source: str = "none"
 
 
 @dataclass
