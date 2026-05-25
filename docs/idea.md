@@ -10,7 +10,7 @@
 | `keyword@1000` | 保守高质量策略 | 95.0% | 17.3% |
 | `budget@300` | 激进省 token 策略 | 88.0% | 38.7% |
 
-注意：当前 total token 统计按行优先使用 API `total_tokens`，流式 usage 不可用时回退到本地估算。最新 full run 的 treated rows 中，304/1320 是 API 实测，1016/1320 是估算值。
+注意：当前 total token 统计按行优先使用 API `total_tokens`，流式 usage 不可用时回退到本地估算。最新 full run 的 treated rows 中，304/1320 是 API 实测，1016/1320 是估算值。Phase 1 被早停时会主动关闭 stream，因此拿不到 provider 最后的 streaming usage chunk；这不是报告脚本问题，而是早停机制和 usage 返回时机之间的冲突。
 
 ## 1. 当前定位
 
@@ -200,9 +200,10 @@ class ReasoningDetector(Protocol):
 验收：
 
 - ✅ 5 种 detector 实现，接口统一
-- ✅ 71 个测试全部通过
+- ✅ 73 个测试全部通过
 - ✅ 早期 3 个数据集 × 4 种 detector × 3 个 budget = 36 组探索实验
 - ✅ 主线 token 实验：math=100、mmlu=100、riddle=20；budget/compression/keyword × 0/300/1000
+- ✅ riddle 数据集已扩充到 100 条，`--n` 已支持限制 riddles 小批量运行
 - ✅ 当前默认策略：`compression@300`
 - ✅ 核心发现：策略选择需要同时看质量损失、reasoning 节省和 total token 节省
 
@@ -291,6 +292,6 @@ Phase A ✅ → Phase B ✅ → Phase C ✅（主线 token 实验完成）→ Ph
 
 1. **提高 total token 实测覆盖率** — 现在很多截断样本还依赖 `estimated_total_tokens`，需要优先确认 LLM API 的 streaming usage 能否完整返回。
 2. **任务分类路由** — 先把 `compression@300` 作为默认，再按 `math/mmlu/riddle` 这类任务类型做第一版策略选择。
-3. **扩大 riddle 样本** — 当前 riddle 只有 20 题，`keyword@1000` 的 100% 质量不能过度解读。
+3. **重跑扩展 riddle 样本** — 数据集已扩充到 100 条，需要用小批量递增方式重跑并检查新增题质量。
 4. **Hybrid detector** — signal + budget 组合，验证是否能在保持 `compression@300` 质量的同时提高 token 节省。
 5. **文献 claims 逐条核验**，再决定是否写论文/报告。

@@ -332,6 +332,31 @@ def _format_pct(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
+def _calibrate_phase1_estimates(treated: pd.DataFrame) -> dict[str, float | int]:
+    exact = treated[
+        treated["phase1_total_tokens"].notna()
+        & treated["estimated_phase1_total_tokens"].notna()
+        & (treated["phase1_total_tokens"] > 0)
+    ].copy()
+    if exact.empty:
+        return {
+            "n": 0,
+            "mean_error": 0.0,
+            "median_error": 0.0,
+            "mean_abs_error": 0.0,
+        }
+
+    relative_error = (
+        exact["estimated_phase1_total_tokens"] - exact["phase1_total_tokens"]
+    ) / exact["phase1_total_tokens"]
+    return {
+        "n": int(len(exact)),
+        "mean_error": float(relative_error.mean()),
+        "median_error": float(relative_error.median()),
+        "mean_abs_error": float(relative_error.abs().mean()),
+    }
+
+
 def _make_report(
     dataset_summary: pd.DataFrame,
     overall: pd.DataFrame,
@@ -413,7 +438,7 @@ def _make_report(
         "mmlu": "Best quality and strong total-token savings on the current run.",
         "riddle": (
             "Best observed quality on a small sample; treat this as conservative until "
-            "the riddle set is larger."
+            "the expanded riddle run is complete."
         ),
     }
     for dataset, config in recommendations.items():
@@ -436,6 +461,11 @@ def _make_report(
     exact_count = int(token_source.get("total_tokens", 0))
     estimated_count = int(token_source.get("estimated_total_tokens", 0))
     total_count = exact_count + estimated_count
+    phase1_api_count = int(treated["phase1_total_tokens"].notna().sum())
+    phase2_rows = treated[treated["phase2_used"]]
+    phase2_api_count = int(phase2_rows["phase2_total_tokens"].notna().sum())
+    phase2_total = int(len(phase2_rows))
+    calibration = _calibrate_phase1_estimates(treated)
 
     report = f"""# Full Main Experiment Report
 
@@ -479,6 +509,19 @@ For a first router:
 `estimated_total_tokens` when streaming usage is unavailable.
 In this run, {exact_count}/{total_count} treated rows used API `total_tokens`;
 {estimated_count}/{total_count} treated rows used `estimated_total_tokens`.
+
+Phase 1 API usage is available for {phase1_api_count}/{total_count} treated rows.
+The missing Phase 1 rows are expected: early stopping closes the stream before the
+provider can emit the final streaming usage chunk. Phase 2 API usage is available
+for {phase2_api_count}/{phase2_total} rows where Phase 2 was used.
+
+On rows where Phase 1 has both API usage and local estimates
+(`n={calibration["n"]}`), local `estimated_phase1_total_tokens` has mean error
+{_format_pct(float(calibration["mean_error"]))}, median error
+{_format_pct(float(calibration["median_error"]))}, and mean absolute error
+{_format_pct(float(calibration["mean_abs_error"]))}. Treat total-token savings as
+directionally useful until interrupted Phase 1 cost is calibrated with a better
+provider tokenizer or a dedicated calibration run.
 
 ## Dataset Metrics
 

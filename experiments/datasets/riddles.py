@@ -7,7 +7,7 @@ from .base import Question
 _DATA_FILE = DATA_DIR / "riddles.jsonl"
 
 
-def load(difficulties: list[str] | None = None) -> list[Question]:
+def load(difficulties: list[str] | None = None, n: int | None = None) -> list[Question]:
     questions = []
     with _DATA_FILE.open(encoding=DEFAULT_ENCODING) as f:
         for line in f:
@@ -24,4 +24,6 @@ def load(difficulties: list[str] | None = None) -> list[Question]:
                     eval_mode=row.get("eval_mode", "llm_judge"),
                 )
             )
+            if n is not None and len(questions) >= n:
+                break
     return questions

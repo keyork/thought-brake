@@ -321,7 +321,7 @@ def main() -> None:
 
     questions: list[Question] = []
     if args.dataset in ("riddles", "all"):
-        questions += riddles.load(difficulties=difficulties)
+        questions += riddles.load(difficulties=difficulties, n=args.n)
     if args.dataset in ("gsm8k", "all"):
         questions += gsm8k.load(n=args.n)
     if args.dataset in ("mmlu", "all"):

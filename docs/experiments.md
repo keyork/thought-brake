@@ -45,6 +45,10 @@ WORKERS=25
 PHASE2=direct
 ```
 
+`N` applies to every dataset, including riddles. The local riddle set currently
+contains 100 questions, so the default full run uses 100 math, 100 MMLU, and 100
+riddle questions.
+
 Outputs:
 
 ```text
