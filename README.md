@@ -346,6 +346,7 @@ docs/                     技术方案、调研、实验说明
 | [docs/release_v0_1.md](docs/release_v0_1.md) | v0.1 release notes 和 blog 大纲 |
 | [docs/plan.md](docs/plan.md) | milestone 执行计划 |
 | [docs/v0_1_milestone_status.md](docs/v0_1_milestone_status.md) | v0.1 状态快照 |
+| [docs/bocpd_design.md](docs/bocpd_design.md) | v0.2 BOCPD / change-point detector 设计草案 |
 | [docs/survey.md](docs/survey.md) | Reasoning model overthinking 缓解方向调研 |
 | [docs/idea.md](docs/idea.md) | 研发路线和 roadmap |
 | [docs/experiments.md](docs/experiments.md) | 实验运行指南 |

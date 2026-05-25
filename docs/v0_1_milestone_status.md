@@ -6,8 +6,8 @@
 
 当前阶段定义：
 
-- v0.1：Layer 1 literal text detectors，默认策略 `compression@1000`
-- v0.2：BOCPD / change-point detector，目标是减少 magic threshold
+- v0.1：Layer 1 literal text detectors，默认策略 `compression@1000`，已打 `v0.1.0` tag
+- v0.2：BOCPD / change-point detector，目标是减少 magic threshold；设计草案见 [bocpd_design.md](bocpd_design.md)
 - v0.3：token calibration + cross-vendor sanity check
 
 ## 1. 当前一句话定位

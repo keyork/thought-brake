@@ -101,7 +101,7 @@
 
 ### v0.2 必做
 
-1. **写 Layer 2 设计文档**
+1. **写 Layer 2 设计文档** ✅
    - signal definition
    - hazard / prior
    - online update
@@ -186,9 +186,9 @@ balanced-aggressive: compression@300
 
 ## 当前下一步
 
-当前 v0.1 叙事、报告、图和 release draft 已经基本收敛。建议马上做 release closeout：
+当前 v0.1 已经打 `v0.1.0` tag，release draft 已经落地；v0.2 BOCPD 设计文档也已启动。建议马上做：
 
-1. 跑一次发布前检查：`pytest` / `ruff` / `mypy`
-2. 打 `v0.1.0` tag 或创建 GitHub release
-3. 发布 blog / 项目说明
-4. 然后进入 v0.2：BOCPD / change-point detector 设计文档
+1. 创建 GitHub Release，内容使用 `docs/release_v0_1.md`
+2. 评审 `docs/bocpd_design.md`，确认 v0.2 的最小实现范围
+3. 实现 BOCPD feature extraction 和 `OnlineChangePoint` core
+4. 接入 `BOCPDDetector` 并跑 20-50 题 probe
