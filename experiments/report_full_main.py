@@ -32,11 +32,8 @@ DETECTOR_COLORS = {
     "compression": "#F58518",
     "keyword": "#54A24B",
 }
-RECOMMENDED = {
-    "math": "keyword@300",
-    "mmlu": "keyword@300",
-    "riddle": "compression@300",
-}
+OVERALL_QUALITY_TOLERANCE = 0.01
+DATASET_QUALITY_TOLERANCE = 0.03
 
 
 def _load_results(paths: list[Path]) -> pd.DataFrame:
@@ -155,13 +152,29 @@ def _summary(treated: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return dataset_summary, overall
 
 
-def _plot_overall_tradeoff(overall: pd.DataFrame, output: Path) -> None:
+def _select_best_tradeoff(summary: pd.DataFrame, tolerance: float) -> pd.Series:
+    """Pick the highest-savings config close to the best observed quality."""
+    quality_floor = summary["quality"].max() - tolerance
+    candidates = summary[summary["quality"] >= quality_floor]
+    return candidates.sort_values(["cost_savings", "quality"], ascending=False).iloc[0]
+
+
+def _dataset_recommendations(dataset_summary: pd.DataFrame) -> dict[str, str]:
+    recommendations = {}
+    for dataset, group in dataset_summary.groupby("dataset"):
+        recommendations[dataset] = _select_best_tradeoff(group, DATASET_QUALITY_TOLERANCE)[
+            "config"
+        ]
+    return recommendations
+
+
+def _plot_overall_tradeoff(overall: pd.DataFrame, output: Path, recommended_config: str) -> None:
     fig, ax = plt.subplots(figsize=(8.5, 5.8))
     ax.axhspan(90, 100, color="#E8F2E8", alpha=0.8, zorder=0)
-    ax.axvspan(60, 100, color="#E8F2E8", alpha=0.35, zorder=0)
+    ax.axvspan(25, 100, color="#E8F2E8", alpha=0.35, zorder=0)
     ax.axhline(90, color="#6B7280", linestyle="--", linewidth=1)
-    ax.axvline(40, color="#6B7280", linestyle="--", linewidth=1)
-    keyword_row = overall[overall["config"] == "keyword@300"].iloc[0]
+    ax.axvline(25, color="#6B7280", linestyle="--", linewidth=1)
+    recommended_row = overall[overall["config"] == recommended_config].iloc[0]
 
     label_offsets = {
         "keyword@1000": (-28, 8),
@@ -175,8 +188,8 @@ def _plot_overall_tradeoff(overall: pd.DataFrame, output: Path) -> None:
         detector = row["run_detector"]
         budget = int(row["budget"])
         marker = "o" if budget == 300 else "s"
-        size = 260 if row["config"] == "keyword@300" else 150
-        edge = "#111827" if row["config"] == "keyword@300" else "white"
+        size = 260 if row["config"] == recommended_config else 150
+        edge = "#111827" if row["config"] == recommended_config else "white"
         ax.scatter(
             row["cost_savings"] * 100,
             row["quality"] * 100,
@@ -197,14 +210,14 @@ def _plot_overall_tradeoff(overall: pd.DataFrame, output: Path) -> None:
         )
 
     ax.annotate(
-        "Best default: keyword@300\nhigh quality + high savings",
-        xy=(keyword_row["cost_savings"] * 100, keyword_row["quality"] * 100),
-        xytext=(44, 94.8),
+        f"Best default: {recommended_config}\nnear-best quality + higher savings",
+        xy=(recommended_row["cost_savings"] * 100, recommended_row["quality"] * 100),
+        xytext=(36, 94.8),
         arrowprops={"arrowstyle": "->", "color": "#111827", "linewidth": 1.3},
         fontsize=10,
         bbox={"boxstyle": "round,pad=0.35", "fc": "white", "ec": "#111827"},
     )
-    ax.set_xlim(0, 82)
+    ax.set_xlim(0, 45)
     ax.set_ylim(84, 96)
     ax.set_xlabel("Total token savings (%)")
     ax.set_ylabel("Answer quality (%)")
@@ -215,7 +228,9 @@ def _plot_overall_tradeoff(overall: pd.DataFrame, output: Path) -> None:
     plt.close(fig)
 
 
-def _plot_dataset_matrix(dataset_summary: pd.DataFrame, output: Path) -> None:
+def _plot_dataset_matrix(
+    dataset_summary: pd.DataFrame, output: Path, recommendations: dict[str, str]
+) -> None:
     configs = [
         "budget@300",
         "budget@1000",
@@ -252,7 +267,7 @@ def _plot_dataset_matrix(dataset_summary: pd.DataFrame, output: Path) -> None:
             cost_saving = cost_savings.loc[dataset, config]
             text = f"Q {quality * 100:.0f}%\nR {saving * 100:.0f}%\nT {cost_saving * 100:.0f}%"
             ax.text(j, i, text, ha="center", va="center", fontsize=9, color="#111827")
-            if RECOMMENDED.get(dataset) == config:
+            if recommendations.get(dataset) == config:
                 rect = plt.Rectangle(
                     (j - 0.5, i - 0.5),
                     1,
@@ -283,7 +298,7 @@ def _plot_loss_vs_savings(overall: pd.DataFrame, output: Path) -> None:
     ax1.set_ylabel("Baseline-correct answers lost (count)")
     ax1.set_xticks(list(x))
     ax1.set_xticklabels(labels, rotation=30, ha="right")
-    ax1.set_title("Quality cost: keyword@300 loses far fewer correct answers")
+    ax1.set_title("Quality cost: compare lost correct answers against token savings")
     ax1.grid(axis="y", alpha=0.25)
 
     for bar, value in zip(bars, ordered["lost_baseline_correct"]):
@@ -317,7 +332,14 @@ def _format_pct(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
-def _make_report(dataset_summary: pd.DataFrame, overall: pd.DataFrame, output: Path) -> str:
+def _make_report(
+    dataset_summary: pd.DataFrame,
+    overall: pd.DataFrame,
+    treated: pd.DataFrame,
+    output: Path,
+    recommended_config: str,
+    recommendations: dict[str, str],
+) -> str:
     overall_table = overall[
         [
             "config",
@@ -382,31 +404,38 @@ def _make_report(dataset_summary: pd.DataFrame, overall: pd.DataFrame, output: P
         }
     )
 
-    recommendations = []
-    for dataset, config in RECOMMENDED.items():
+    recommendation_rows = []
+    why = {
+        "math": (
+            "Keeps quality within the selected tolerance while giving materially better "
+            "total-token savings than conservative 1000-token variants."
+        ),
+        "mmlu": "Best quality and strong total-token savings on the current run.",
+        "riddle": (
+            "Best observed quality on a small sample; treat this as conservative until "
+            "the riddle set is larger."
+        ),
+    }
+    for dataset, config in recommendations.items():
         row = dataset_summary[
             (dataset_summary["dataset"] == dataset) & (dataset_summary["config"] == config)
         ].iloc[0]
-        recommendations.append(
+        recommendation_rows.append(
             {
                 "Dataset": dataset,
                 "Recommended": config,
                 "Quality": _format_pct(row["quality"]),
                 "Savings": _format_pct(row["savings"]),
                 "TokenSavings": _format_pct(row["cost_savings"]),
-                "Why": {
-                    "math": "Best quality among high-savings options; much better than budget@300.",
-                    "mmlu": (
-                        "Best high-savings quality point; keyword@1000 is only +1pt "
-                        "but halves savings."
-                    ),
-                    "riddle": (
-                        "Best quality on the riddle set, though savings is lower than budget."
-                    ),
-                }[dataset],
+                "Why": why.get(dataset, "Best current quality/savings tradeoff."),
             }
         )
-    recommendation_table = pd.DataFrame(recommendations)
+    recommendation_table = pd.DataFrame(recommendation_rows)
+    recommended_row = overall[overall["config"] == recommended_config].iloc[0]
+    token_source = treated["cost_token_metric"].value_counts().to_dict()
+    exact_count = int(token_source.get("total_tokens", 0))
+    estimated_count = int(token_source.get("estimated_total_tokens", 0))
+    total_count = exact_count + estimated_count
 
     report = f"""# Full Main Experiment Report
 
@@ -422,11 +451,13 @@ files and should not be used for the final conclusion.
 
 ## Conclusion
 
-Use `keyword@300` as the current default policy.
+Use `{recommended_config}` as the current default policy.
 
-It is the best overall high-savings point on the current run. The report keeps
-both reasoning savings and total-token savings: reasoning savings explains the
-mechanism, while total-token savings is the cost metric.
+It is the best overall tradeoff on the current run: quality is
+{_format_pct(recommended_row["quality"])} and total-token savings is
+{_format_pct(recommended_row["cost_savings"])}. The report keeps both reasoning
+savings and total-token savings: reasoning savings explains the mechanism, while
+total-token savings is the cost metric.
 
 For a first router:
 
@@ -446,6 +477,8 @@ For a first router:
 `Fixed` means baseline was wrong but the early-stop answer became correct.
 `TokenSavings` uses API `total_tokens` when present and falls back to
 `estimated_total_tokens` when streaming usage is unavailable.
+In this run, {exact_count}/{total_count} treated rows used API `total_tokens`;
+{estimated_count}/{total_count} treated rows used `estimated_total_tokens`.
 
 ## Dataset Metrics
 
@@ -472,14 +505,16 @@ def main() -> None:
     df = _load_results([Path(p) for p in args.inputs])
     treated = _with_baseline(df)
     dataset_summary, overall = _summary(treated)
+    recommended_config = _select_best_tradeoff(overall, OVERALL_QUALITY_TOLERANCE)["config"]
+    recommendations = _dataset_recommendations(dataset_summary)
 
     dataset_summary.to_csv(output / "dataset_summary.csv", index=False, encoding=DEFAULT_ENCODING)
     overall.to_csv(output / "overall_summary.csv", index=False, encoding=DEFAULT_ENCODING)
 
-    _plot_overall_tradeoff(overall, output)
-    _plot_dataset_matrix(dataset_summary, output)
+    _plot_overall_tradeoff(overall, output, recommended_config)
+    _plot_dataset_matrix(dataset_summary, output, recommendations)
     _plot_loss_vs_savings(overall, output)
-    _make_report(dataset_summary, overall, output)
+    _make_report(dataset_summary, overall, treated, output, recommended_config, recommendations)
 
     print(f"Saved focused report to {output}")
 

@@ -1,6 +1,16 @@
 # 研发路线：从可靠基线到任务自适应早停
 
-本文档记录 `thought-brake` 研发路线。Phase C 跨数据集实验完成后的核心判断是：**没有"最优 detector"，只有"某个任务类型上的最优 detector"。下一步是任务自适应路由。**
+本文档记录 `thought-brake` 研发路线。当前核心判断是：**没有"最优 detector"，只有"某个质量/成本目标下的最优策略"。** 最新主线 token 实验把默认策略收敛到 `compression@300`；下一步是提升 token 统计可信度，并把策略选择做成任务自适应路由。
+
+最新主线实验结论：
+
+| 策略 | 定位 | 质量 | Total token 节省 |
+|---|---|---:|---:|
+| `compression@300` | 当前默认策略 | 94.1% | 27.7% |
+| `keyword@1000` | 保守高质量策略 | 95.0% | 17.3% |
+| `budget@300` | 激进省 token 策略 | 88.0% | 38.7% |
+
+注意：当前 total token 统计按行优先使用 API `total_tokens`，流式 usage 不可用时回退到本地估算。最新 full run 的 treated rows 中，304/1320 是 API 实测，1016/1320 是估算值。
 
 ## 1. 当前定位
 
@@ -132,9 +142,9 @@ class ReasoningDetector(Protocol):
 | `keyword` | 犹豫短语密度（结论后触发） | `keyword_window_chars`, `keyword_trigger_threshold` |
 | `semantic` | 内容词 Jaccard 相似度 | `semantic_window_chars`, `semantic_jaccard_threshold` |
 
-#### 跨数据集实验结果
+#### 早期跨数据集探索结果
 
-三个数据集，各 20 题，4 种 detector × 3 个 budget（300/500/1000），direct 模式：
+以下是早期小样本探索：三个数据集，各 20 题，4 种 detector × 3 个 budget（300/500/1000），direct 模式。它用于发现方向，不作为当前最终结论。
 
 **Detector@300 对照（最优 budget 点）**：
 
@@ -191,12 +201,14 @@ class ReasoningDetector(Protocol):
 
 - ✅ 5 种 detector 实现，接口统一
 - ✅ 71 个测试全部通过
-- ✅ 3 个数据集 × 4 种 detector × 3 个 budget = 36 组实验
-- ✅ 核心发现：没有万能最优，任务类型决定策略
+- ✅ 早期 3 个数据集 × 4 种 detector × 3 个 budget = 36 组探索实验
+- ✅ 主线 token 实验：math=100、mmlu=100、riddle=20；budget/compression/keyword × 0/300/1000
+- ✅ 当前默认策略：`compression@300`
+- ✅ 核心发现：策略选择需要同时看质量损失、reasoning 节省和 total token 节省
 
 ### Phase D：任务自适应路由（规划中）
 
-Phase C 跨数据集实验表明：**没有万能最优 detector，任务类型决定策略。** 下一步的核心问题是：如何自动选择 detector + budget？
+Phase C 实验表明：**没有万能最优 detector，任务类型和质量/成本目标共同决定策略。** 下一步的核心问题是：如何自动选择 detector + budget，并让 total token 统计尽量来自 API 实测？
 
 #### 方向 1：任务分类路由（最高优先级）
 
@@ -236,7 +248,7 @@ PUMA（arXiv:2605.17672）用 embedding 相似度检测语义冗余：
 
 优先级最低——跨数据集实验表明信号 detector 在合理 budget 下已经够用。BOCPD 的增量收益需要更强的证据。
 
-**推荐优先级**：方向 1（任务路由）> 方向 2（hybrid）> 方向 4（oscillation）> 方向 3（embedding）> 方向 5（BOCPD）
+**推荐优先级**：方向 1（token 统计可信度）> 方向 2（任务路由）> 方向 3（hybrid）> 方向 4（oscillation）> 方向 5（embedding）> 方向 6（BOCPD）
 
 ## 5. Compression Detector Layer 1
 
@@ -273,11 +285,12 @@ STOP if CRD < theta_crd OR LZ_ratio < theta_lz
 
 ## 7. 当前优先级
 
-Phase A ✅ → Phase B ✅ → Phase C ✅（跨数据集完成）→ Phase D 规划中
+Phase A ✅ → Phase B ✅ → Phase C ✅（主线 token 实验完成）→ Phase D 规划中
 
 下一步：
 
-1. **任务分类路由** — 基于跨数据集结论，实现自动选择 detector + budget 的路由逻辑
-2. **更大数据集验证** — 当前每个数据集只有 20 题，扩大到 50-100 题确认结论稳定
-3. **Hybrid detector** — signal + budget 组合，验证是否在所有数据集上都优于单一策略
-4. **文献 claims 逐条核验**，再决定是否写论文/报告
+1. **提高 total token 实测覆盖率** — 现在很多截断样本还依赖 `estimated_total_tokens`，需要优先确认 LLM API 的 streaming usage 能否完整返回。
+2. **任务分类路由** — 先把 `compression@300` 作为默认，再按 `math/mmlu/riddle` 这类任务类型做第一版策略选择。
+3. **扩大 riddle 样本** — 当前 riddle 只有 20 题，`keyword@1000` 的 100% 质量不能过度解读。
+4. **Hybrid detector** — signal + budget 组合，验证是否能在保持 `compression@300` 质量的同时提高 token 节省。
+5. **文献 claims 逐条核验**，再决定是否写论文/报告。

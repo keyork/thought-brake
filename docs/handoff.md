@@ -2,6 +2,8 @@
 
 日期：2026-05-24
 
+> 历史说明：这是一份早期交接快照，记录的是 schema v2 和早期 riddle 实验状态。当前代码、实验入口和结论请以 `README.md`、`docs/experiments.md`、`docs/idea.md` 以及 `experiments/report_full_main.py` 为准。
+
 ## 当前状态
 
 仓库当前大部分文件仍是 untracked。`git status --short --untracked-files=all` 会看到 `.gitignore`、`README.md` 已修改，以及 `src/`、`tests/`、`experiments/`、`docs/`、`.env.example`、`CLAUDE.md`、`pyproject.toml`、`uv.lock` 等新文件。

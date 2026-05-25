@@ -63,6 +63,18 @@ Override values from the shell:
 WORKERS=10 N=20 ./experiments/run_token_main.sh
 ```
 
+Current report interpretation:
+
+- Global default policy: `compression@300`.
+- Conservative high-quality policy: `keyword@1000`.
+- Aggressive high-savings policy: `budget@300`.
+- The current report uses total-token cost as the main cost metric. It reads API
+  `total_tokens` when available and falls back to `estimated_total_tokens` for
+  rows where streaming usage is unavailable.
+- In the latest full run, 304/1320 treated rows used API `total_tokens`, and
+  1016/1320 treated rows used `estimated_total_tokens`. Treat total-token
+  savings as directionally useful, not as final billing-grade measurement.
+
 ## 3. Run a Smoke Test
 
 Run a small experiment without evaluation first. This checks credentials, streaming, early stopping, JSONL writing, and resume behavior.
@@ -257,7 +269,9 @@ uv run python experiments/analysis.py \
 
 ## 10. Troubleshooting
 
-If requests are too slow, increase `--workers` up to the LLM API's rate limit. The default is 10.
+If requests are too slow, increase `--workers` up to the LLM API's rate limit.
+The clean main script defaults to `WORKERS=25`; individual `runner.py` examples
+in this document use `--workers 10` as a conservative starting point.
 
 If the LLM API rate-limits, lower `--workers` to `5` or `3`.
 
