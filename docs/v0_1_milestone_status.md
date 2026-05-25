@@ -256,10 +256,19 @@ class ReasoningDetector(Protocol):
 - `--workers`
 - `--n`
 - focused report
-- 结论导向图：
+- 结论导向图和证据链可视化：
+  - `quality_gap_from_baseline.png`
+  - `savings_decomposition.png`
+  - `token_breakdown.png`
   - `overall_tradeoff.png`
+  - `strategy_map.png`
+  - `dataset_tradeoffs.png`
   - `dataset_decision_matrix.png`
+  - `outcome_flow.png`
   - `loss_vs_savings.png`
+  - `detector_profiles.png`
+  - `token_estimate_calibration.png`
+  - `latency_change.png`
 
 ### 数据集
 
@@ -400,7 +409,7 @@ task-specific hard limit
 
 我建议下一步按这个顺序：
 
-### Step 1：收敛 v0.1 发布叙事
+### Step 1：收敛 v0.1 发布叙事 ✅
 
 把 `README.md`、`docs/idea.md` 和 final report 收敛到同一条主线：
 
@@ -410,7 +419,7 @@ task-specific hard limit
 4. cost-aware evaluation
 5. limitations and no-overclaim
 
-### Step 2：升级最终 report
+### Step 2：升级最终 report ✅
 
 当前 `report.md` 是工程报告。建议生成更像最终研究报告的版本：
 
@@ -421,7 +430,7 @@ task-specific hard limit
 - limitations
 - strategy recommendation
 
-### Step 3：做 strategy map 图
+### Step 3：做 strategy map 图 ✅
 
 需要一张最服务结论的图：
 
@@ -443,7 +452,7 @@ quality
 - 为什么 `keyword@300` 不是 default
 - 为什么 `budget@300` 只是 aggressive
 
-### Step 4：写 v0.1 发布材料
+### Step 4：写 v0.1 发布材料 ✅
 
 包括：
 
@@ -452,6 +461,12 @@ quality
 - installation / quickstart
 - 当前实验结论和 limitations
 - 和 EAT / LZ Penalty / Adaptive CoT / internal-signal methods 的定位对比
+
+当前已落地：
+
+- [report_v0_1.md](report_v0_1.md)
+- [release_v0_1.md](release_v0_1.md)
+- README public-facing narrative
 
 ### Step 5：把 BOCPD 作为 v0.2 设计文档落地
 
@@ -509,16 +524,11 @@ riddle: keyword@1000
 
 ## 10. 当前工作树提示
 
-截至这份文档写入时，相关代码已经推到远端，当前主线 commit 是：
-
-```text
-020ee2e Expand riddle dataset and clarify token metrics
-```
-
 如果后续继续修改，建议先检查：
 
 ```bash
 git status --short --branch
+git log -1 --oneline
 uv run pytest
 uv run ruff check src tests experiments
 uv run mypy src

@@ -9,19 +9,20 @@
 
 ## 当前判断
 
-项目已经完成 v0.1 的核心工程闭环：
+项目已经完成 v0.1 的核心工程与实验闭环：
 
 - client-side streaming monitor
 - early interrupt
 - two-phase final-answer recovery
 - 5 类 detector
 - schema v3 token metrics
-- focused report
+- focused report 和 12 张证据型可视化
+- v0.1 research report draft
 - 73 个测试
 
 但项目还没有完成两个更高层目标：
 
-- 对外发布：让别人理解、安装、复现实验
+- 对外发布：创建 release/tag/blog，让别人理解、安装、复现实验
 - 数学美感：减少 magic threshold，推进到 BOCPD / change-point detector
 
 因此后续不应继续无序增加 detector，而应按 milestone 推进。
@@ -40,13 +41,13 @@
 
 ### v0.1 必做
 
-1. **重写 README 的 public-facing narrative**
+1. **重写 README 的 public-facing narrative** ✅
    - 清楚解释 contribution
    - 不把工程细节放在最前面
    - 明确 quickstart
    - 明确 limitations
 
-2. **升级 final report**
+2. **升级 final report** ✅
    - research question
    - setup
    - metrics
@@ -54,17 +55,17 @@
    - limitations
    - strategy recommendation
 
-3. **新增 strategy map 图**
+3. **新增 strategy map 图** ✅
    - 用一张图解释 default / aggressive / conservative 三档策略
    - 不用 TokenSavings 的 0.8pp 微差做精确排序
    - 强调 quality 和 Lost 主导 `compression@1000` / `compression@300` / `keyword@1000` 的取舍
 
-4. **补 survey 对比**
+4. **补 survey 对比** ✅
    - EAT (arXiv:2510.08146)：black-box + entropy/proxy model
    - LZ Penalty / compression-style methods：更接近 local decoding 或非 API 部署
    - ROM / NEAT / RCPD / Adaptive CoT：若依赖内部信号或训练，需要明确和本项目不同
 
-5. **准备发布材料**
+5. **准备发布材料** ✅
    - blog 大纲
    - README quickstart
    - fixed limitations section
@@ -185,9 +186,9 @@ balanced-aggressive: compression@300
 
 ## 当前下一步
 
-建议马上做：
+当前 v0.1 叙事、报告、图和 release draft 已经基本收敛。建议马上做 release closeout：
 
-1. 更新 `docs/idea.md`，让它和本计划一致
-2. 更新 `docs/survey.md`，补 EAT 和相关工作对比
-3. 升级 `experiments/report_full_main.py`，生成 strategy map 和正式 report
-4. 重写 README 的前半部分，服务 v0.1 发布
+1. 跑一次发布前检查：`pytest` / `ruff` / `mypy`
+2. 打 `v0.1.0` tag 或创建 GitHub release
+3. 发布 blog / 项目说明
+4. 然后进入 v0.2：BOCPD / change-point detector 设计文档
