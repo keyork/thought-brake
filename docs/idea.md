@@ -1,16 +1,17 @@
 # 研发路线：从可靠基线到任务自适应早停
 
-本文档记录 `thought-brake` 研发路线。当前核心判断是：**没有"最优 detector"，只有"某个质量/成本目标下的最优策略"。** 最新主线 token 实验把默认策略收敛到 `compression@300`；下一步是提升 token 统计可信度，并把策略选择做成任务自适应路由。
+本文档记录 `thought-brake` 研发路线。当前核心判断是：**没有"最优 detector"，只有"某个质量/成本目标下的最优策略"。** 最新主线 token 实验把默认策略收敛到 `compression@1000`，`compression@300` 则成为更激进的 balanced-aggressive 策略。接下来先收敛 v0.1 发布叙事，再把 BOCPD 作为 v0.2 明确推进；具体执行计划见 [plan.md](plan.md)。
 
 最新主线实验结论：
 
 | 策略 | 定位 | 质量 | Total token 节省 |
 |---|---|---:|---:|
-| `compression@300` | 当前默认策略 | 94.1% | 27.7% |
-| `keyword@1000` | 保守高质量策略 | 95.0% | 17.3% |
-| `budget@300` | 激进省 token 策略 | 88.0% | 38.7% |
+| `keyword@1000` | 保守高质量策略 | 94.3% | 14.3% |
+| `compression@1000` | 当前默认策略 | 93.5% | 19.0% |
+| `compression@300` | balanced-aggressive 策略 | 92.3% | 29.1% |
+| `budget@300` | 激进省 token 策略 | 88.6% | 42.1% |
 
-注意：当前 total token 统计按行优先使用 API `total_tokens`，流式 usage 不可用时回退到本地估算。最新 full run 的 treated rows 中，304/1320 是 API 实测，1016/1320 是估算值。Phase 1 被早停时会主动关闭 stream，因此拿不到 provider 最后的 streaming usage chunk；这不是报告脚本问题，而是早停机制和 usage 返回时机之间的冲突。
+注意：当前 total token 统计按行优先使用 API `total_tokens`，流式 usage 不可用时回退到本地估算。最新 full run 的 treated rows 中，400/1800 是 API 实测，1400/1800 是估算值。Phase 1 被早停时会主动关闭 stream，因此拿不到 provider 最后的 streaming usage chunk；这不是报告脚本问题，而是早停机制和 usage 返回时机之间的冲突。
 
 ## 1. 当前定位
 
@@ -202,16 +203,41 @@ class ReasoningDetector(Protocol):
 - ✅ 5 种 detector 实现，接口统一
 - ✅ 73 个测试全部通过
 - ✅ 早期 3 个数据集 × 4 种 detector × 3 个 budget = 36 组探索实验
-- ✅ 主线 token 实验：math=100、mmlu=100、riddle=20；budget/compression/keyword × 0/300/1000
+- ✅ 主线 token 实验：math=100、mmlu=100、riddle=100；budget/compression/keyword × 0/300/1000
 - ✅ riddle 数据集已扩充到 100 条，`--n` 已支持限制 riddles 小批量运行
-- ✅ 当前默认策略：`compression@300`
+- ✅ 当前默认策略：`compression@1000`
 - ✅ 核心发现：策略选择需要同时看质量损失、reasoning 节省和 total token 节省
 
 ### Phase D：任务自适应路由（规划中）
 
-Phase C 实验表明：**没有万能最优 detector，任务类型和质量/成本目标共同决定策略。** 下一步的核心问题是：如何自动选择 detector + budget，并让 total token 统计尽量来自 API 实测？
+Phase C 实验表明：**没有万能最优 detector，任务类型和质量/成本目标共同决定策略。** 下一步不是继续无序增加 detector，而是分成两个明确阶段：
 
-#### 方向 1：任务分类路由（最高优先级）
+1. v0.1：发布 Layer 1，强调 client-side + black-box API + visible reasoning text 的工程 niche。
+2. v0.2：实现 BOCPD / change-point detector，回应最初“数学上更美、减少 magic threshold”的目标。
+
+任务路由仍然重要，但应排在 v0.1 叙事收敛和 v0.2 BOCPD 之后。
+
+#### 方向 1：v0.1 发布与叙事收敛（当前最高优先级）
+
+把当前已经跑通的 Layer 1 结果变成可解释、可复现、可发布的版本：
+
+- 重写 README 的 public-facing narrative
+- 升级 focused report，使其更像研究报告而不是工程日志
+- 做一张 strategy map 图，解释 default / aggressive / conservative 三档策略
+- 明确和 EAT、内部信号方法、proxy-model 方法的差异
+- 明确 limitations：token estimate uncertainty、single-vendor evidence
+
+#### 方向 2：BOCPD / Layer 2（数学美感主线）
+
+BOCPD 是当前最值得保留的研究增量。它不是“再加一个 detector”，而是尝试把停止判据从手调阈值推进到在线变化点检测。
+
+目标：
+
+- 减少 `@300`、压缩阈值、连续窗口数等 magic parameters 的主导地位
+- 用 posterior change probability 描述过度推理阶段切换
+- 和 `compression@300` / `keyword@300` / `budget@300` 做直接对比
+
+#### 方向 3：任务分类路由
 
 根据问题特征自动选择最优策略：
 - 短推理/均匀分布 → budget（简单快速）
@@ -219,8 +245,9 @@ Phase C 实验表明：**没有万能最优 detector，任务类型和质量/成
 - 实现方式：前 N 个字符判断问题类型，或用户显式指定任务类型
 - `EarlyStopConfig.for_task()` 已有预设，但当前只区分 chat/qa/math/complex
 - 需要根据实验数据更新预设值
+- 但不要在 v0.1 里把它包装成已验证的智能路由
 
-#### 方向 2：Hybrid Detector — signal guard + budget fallback
+#### 方向 4：Hybrid Detector — signal guard + budget fallback
 
 信号 detector 做主力，budget 做兜底：
 - 信号 detector 在 soft_budget 前不触发（warmup 期）
@@ -228,7 +255,7 @@ Phase C 实验表明：**没有万能最优 detector，任务类型和质量/成
 - 关键参数：soft_budget 和 hard_limit 的选择——实验表明这仍然依赖任务类型
 - 本质上是把"任务自适应"问题下推到了"参数选择"
 
-#### 方向 3：Embedding-based 语义冗余检测（PUMA 路线）
+#### 方向 5：Embedding-based 语义冗余检测（PUMA 路线）
 
 PUMA（arXiv:2605.17672）用 embedding 相似度检测语义冗余：
 - 用轻量 embedding 模型对滑动窗口做 embedding
@@ -237,7 +264,7 @@ PUMA（arXiv:2605.17672）用 embedding 相似度检测语义冗余：
 - 代价：需要额外 embedding 模型调用或本地推理
 - 当前优先级降低——信号 detector 已在 MMLU 上达到 100%，增量收益不确定
 
-#### 方向 4：Answer Oscillation 检测
+#### 方向 6：Answer Oscillation 检测
 
 文献报告 answer oscillation 与 overthinking 的 r=0.78 相关：
 - 从 reasoning 中实时提取 candidate answer
@@ -245,11 +272,7 @@ PUMA（arXiv:2605.17672）用 embedding 相似度检测语义冗余：
 - 对多选题（MMLU）特别适用——可以直接监控 A/B/C/D 的出现频率
 - MMLU 上 keyword@300 已经 100%，但 oscillation 可能提供更优雅的信号
 
-#### 方向 5：BOCPD on 文本信号
-
-优先级最低——跨数据集实验表明信号 detector 在合理 budget 下已经够用。BOCPD 的增量收益需要更强的证据。
-
-**推荐优先级**：方向 1（token 统计可信度）> 方向 2（任务路由）> 方向 3（hybrid）> 方向 4（oscillation）> 方向 5（embedding）> 方向 6（BOCPD）
+**推荐优先级**：方向 1（v0.1 发布）> 方向 2（BOCPD / Layer 2）> 方向 3（cost calibration + cross-vendor）> 方向 4（任务路由）> 方向 5（hybrid）> 方向 6（oscillation / embedding）
 
 ## 5. Compression Detector Layer 1
 
@@ -286,12 +309,12 @@ STOP if CRD < theta_crd OR LZ_ratio < theta_lz
 
 ## 7. 当前优先级
 
-Phase A ✅ → Phase B ✅ → Phase C ✅（主线 token 实验完成）→ Phase D 规划中
+Phase A ✅ → Phase B ✅ → Phase C ✅（主线 token 实验完成）→ v0.1 发布准备中
 
 下一步：
 
-1. **提高 total token 实测覆盖率** — 现在很多截断样本还依赖 `estimated_total_tokens`，需要优先确认 LLM API 的 streaming usage 能否完整返回。
-2. **任务分类路由** — 先把 `compression@300` 作为默认，再按 `math/mmlu/riddle` 这类任务类型做第一版策略选择。
-3. **重跑扩展 riddle 样本** — 数据集已扩充到 100 条，需要用小批量递增方式重跑并检查新增题质量。
-4. **Hybrid detector** — signal + budget 组合，验证是否能在保持 `compression@300` 质量的同时提高 token 节省。
-5. **文献 claims 逐条核验**，再决定是否写论文/报告。
+1. **v0.1 发布叙事** — README、final report、strategy map、limitations、quickstart。
+2. **文献 claims 逐条核验** — 尤其是 EAT、内部信号方法、proxy-model 方法。
+3. **BOCPD 设计文档** — 明确 v0.2 的 signal、posterior update、stop criterion 和实验计划。
+4. **Cost calibration** — 用 calibration run 或更贴近 provider 的 tokenizer 降低当前约 15% MAE。
+5. **Cross-vendor sanity check** — 至少再用一个 LLM API 做小规模验证。

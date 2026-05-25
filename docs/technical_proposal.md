@@ -390,12 +390,12 @@ needs_reasoning(question):
 
 - 5 种 detector：budget / compression / ngram / keyword / semantic
 - 跨 3 个数据集验证：riddles / GSM8K / MMLU
-- 已完成主线 token 实验：math=100、mmlu=100、riddle=20；budget/compression/keyword × 0/300/1000
-- riddle 数据集已扩充到 100 条，下一轮 full run 应把 riddle 也纳入 100 题规模
-- 当前默认策略：`compression@300`，质量 94.1%，total token 节省 27.7%
+- 已完成主线 token 实验：math=100、mmlu=100、riddle=100；budget/compression/keyword × 0/300/1000
+- 当前默认策略：`compression@1000`，质量 93.5%，total token 节省 19.0%
 - 核心结论：没有万能最优 detector，策略要同时看任务类型、质量损失和 total token 成本
-  - `compression@300`：当前默认策略，质量/成本折中最好
-  - `keyword@1000`：保守高质量策略，适合 riddle 小样本上的第一版路由
+  - `compression@1000`：当前默认策略，质量/成本折中最好
+  - `compression@300`：balanced-aggressive 策略，total token 节省更高但质量更低
+  - `keyword@1000`：保守高质量策略
   - `budget@300`：激进省 token 策略，但质量损失明显
 
 ### Phase D：任务自适应路由（规划中）

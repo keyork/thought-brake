@@ -69,14 +69,15 @@ WORKERS=10 N=20 ./experiments/run_token_main.sh
 
 Current report interpretation:
 
-- Global default policy: `compression@300`.
+- Global default policy: `compression@1000`.
 - Conservative high-quality policy: `keyword@1000`.
 - Aggressive high-savings policy: `budget@300`.
+- Balanced-aggressive policy: `compression@300`.
 - The current report uses total-token cost as the main cost metric. It reads API
   `total_tokens` when available and falls back to `estimated_total_tokens` for
   rows where streaming usage is unavailable.
-- In the latest full run, 304/1320 treated rows used API `total_tokens`, and
-  1016/1320 treated rows used `estimated_total_tokens`. Treat total-token
+- In the latest full run, 400/1800 treated rows used API `total_tokens`, and
+  1400/1800 treated rows used `estimated_total_tokens`. Treat total-token
   savings as directionally useful, not as final billing-grade measurement.
 
 ## 3. Run a Smoke Test
