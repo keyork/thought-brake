@@ -3,7 +3,7 @@ set -euo pipefail
 
 N="${N:-20}"
 WORKERS="${WORKERS:-10}"
-OUTPUT="${OUTPUT:-experiments/results/bocpd_probe_${N}_v4.jsonl}"
+OUTPUT="${OUTPUT:-experiments/results/bocpd_probe_${N}_v4_detail.jsonl}"
 
 uv run python experiments/runner.py \
   --dataset all \

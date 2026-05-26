@@ -333,6 +333,26 @@ def test_bocpd_detector_stops_after_conclusion_and_low_value_shift() -> None:
     assert stopped
 
 
+def test_bocpd_detector_reports_blockers_before_soft_stop() -> None:
+    cfg = EarlyStopConfig(
+        detector="bocpd",
+        soft_budget=40,
+        hard_limit=10_000,
+        bocpd_window_chars=20,
+        bocpd_min_windows=1,
+        bocpd_stop_prob=0.99,
+        bocpd_low_value_threshold=0.99,
+    )
+    detector = BOCPDDetector(cfg)
+
+    piece = "先分析条件然后建立约束关系继续推导并检查候选答案。"
+    decision = detector.update(piece, len(piece))
+
+    assert not decision.should_stop
+    assert "blocked=" in decision.detail
+    assert "no_conclusion" in decision.detail
+
+
 def test_bocpd_detector_hard_limit() -> None:
     detector = BOCPDDetector(EarlyStopConfig(detector="bocpd", hard_limit=20))
 
@@ -340,3 +360,5 @@ def test_bocpd_detector_hard_limit() -> None:
 
     assert decision.should_stop
     assert decision.reason == StopReason.HARD
+    assert decision.detail.startswith("hard_limit=20")
+    assert "last=bocpd" in decision.detail

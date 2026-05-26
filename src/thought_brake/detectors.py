@@ -625,6 +625,7 @@ class BOCPDDetector:
         self._processed_chars = 0
         self._windows_seen = 0
         self._found_conclusion = False
+        self._last_detail = "bocpd no_windows windows=0 conclusion=0"
         self._state = ChangePointState(
             change_prob=0.0,
             map_run_length=0,
@@ -643,7 +644,7 @@ class BOCPDDetector:
             return StopDecision(
                 should_stop=True,
                 reason=StopReason.HARD,
-                detail=f"hard_limit={self.config.hard_limit}",
+                detail=f"hard_limit={self.config.hard_limit} last={self._last_detail}",
             )
 
         self._buf.append(piece)
@@ -669,17 +670,27 @@ class BOCPDDetector:
         if last_features is None:
             return StopDecision(
                 should_stop=False,
-                detail=f"bocpd_collecting chars={len(text) - self._processed_chars}",
+                detail=(
+                    f"bocpd_collecting chars={len(text) - self._processed_chars} "
+                    f"windows={self._windows_seen} "
+                    f"conclusion={int(self._found_conclusion)} "
+                    f"last={self._last_detail}"
+                ),
             )
 
+        recent_change = self._state.map_run_length <= self.config.bocpd_recent_run_threshold
         detail = (
             f"bocpd p_change={self._state.change_prob:.3f} "
-            f"z={last_features.low_value_score:.3f} r_map={self._state.map_run_length}"
+            f"z={last_features.low_value_score:.3f} "
+            f"r_map={self._state.map_run_length} "
+            f"windows={self._windows_seen} "
+            f"conclusion={int(self._found_conclusion)} "
+            f"recent={int(recent_change)}"
         )
+        self._last_detail = detail
         if self._windows_seen < self.config.bocpd_min_windows:
             return StopDecision(should_stop=False, detail=f"{detail} warmup")
 
-        recent_change = self._state.map_run_length <= self.config.bocpd_recent_run_threshold
         should_stop = (
             total_chars >= self.config.soft_budget
             and self._found_conclusion
@@ -694,7 +705,22 @@ class BOCPDDetector:
                 detail=detail,
             )
 
-        return StopDecision(should_stop=False, detail=detail)
+        blockers = []
+        if total_chars < self.config.soft_budget:
+            blockers.append("below_soft_budget")
+        if not self._found_conclusion:
+            blockers.append("no_conclusion")
+        if not recent_change:
+            blockers.append("no_recent_change")
+        if self._state.change_prob < self.config.bocpd_stop_prob:
+            blockers.append("p_change_below_threshold")
+        if last_features.low_value_score < self.config.bocpd_low_value_threshold:
+            blockers.append("z_below_threshold")
+
+        return StopDecision(
+            should_stop=False,
+            detail=f"{detail} blocked={','.join(blockers)}",
+        )
 
 
 def build_detector(config: EarlyStopConfig) -> ReasoningDetector:
