@@ -150,7 +150,7 @@ Do not claim theoretical optimality or exact billing-grade savings. Present v0.1
 
 ### 7. What Comes Next
 
-- v0.2: BOCPD / change-point detector
+- v0.2: offline replay gate and local value/MDL-style signal exploration
 - v0.3: token calibration and cross-vendor sanity check
 - later: task router and hybrid detector
 

@@ -27,7 +27,7 @@ Current test areas:
 | file | coverage |
 |---|---|
 | `tests/test_config.py` | Defaults, task presets, environment overrides |
-| `tests/test_detectors.py` | Budget, no-stop, and compression detector behavior |
+| `tests/test_detectors.py` | Budget, no-stop, compression, keyword, semantic, and BOCPD detector behavior |
 | `tests/test_monitor.py` | Phase 1 streaming, soft/hard stop, interrupted stream handling |
 | `tests/test_prefill.py` | Phase 2 prefill message construction and streaming collection |
 | `tests/test_client.py` | Client integration, passthrough, Phase 2 fallback, interruption recovery |
@@ -74,6 +74,7 @@ Check CLI imports and arguments:
 ```bash
 uv run python experiments/runner.py --help
 uv run python experiments/analysis.py --help
+uv run python experiments/offline_detector_probe.py
 ```
 
 Run a fast no-evaluation experiment:
@@ -101,6 +102,7 @@ uv run ruff check src tests experiments
 uv run mypy src
 uv run python experiments/runner.py --help
 uv run python experiments/analysis.py --help
+uv run python experiments/offline_detector_probe.py
 ```
 
 If you changed experiment execution behavior, also run a small `--skip-eval` smoke test.

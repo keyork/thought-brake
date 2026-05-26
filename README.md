@@ -49,7 +49,7 @@ v0.1 的核心定位：
 
 ## 工作原理
 
-`thought-brake` 不是单一的固定 budget 截断器，而是一套“流式观测 → 早停决策 → 答案收束”的客户端控制框架。当前实现已经支持 budget、compression、ngram、keyword、semantic 多种 detector，并已加入实验性的 `bocpd` detector；v0.1 聚焦可解释、可复现的 Layer 1 literal text detectors，v0.2 会推进 BOCPD / change-point detector 来减少 magic threshold。
+`thought-brake` 不是单一的固定 budget 截断器，而是一套“流式观测 → 早停决策 → 答案收束”的客户端控制框架。当前实现已经支持 budget、compression、ngram、keyword、semantic 多种 detector，并已加入实验性的 `bocpd` detector；v0.1 聚焦可解释、可复现的 Layer 1 literal text detectors。BOCPD 已完成小批量验证，但结果是 negative：当前信号没有触发 posterior soft stop，因此不会作为当前 v0.2 主线。
 
 ### 1. 两阶段执行框架
 
@@ -97,7 +97,7 @@ v0.1 的核心定位：
 | Signal detector | `compression` / `ngram` / `keyword` / `semantic` | 不预判推理长度，等模型出现重复、犹豫、语义重述等 overthinking 信号再截断 |
 | Hybrid | signal guard + budget fallback | 先等信号，超过硬上限仍兜底截断，避免无限推理 |
 | Router | task-aware detector selection | 根据问题类型自动选择 detector 和预算 |
-| Research extensions | answer oscillation / embedding / BOCPD | 面向多选摇摆、换词重述、阶段变化等更细粒度信号 |
+| Research extensions | value/MDL / answer oscillation / BOCPD | 更细粒度信号；进入 API probe 前必须先过离线 replay |
 
 跨数据集实验已经验证：没有万能最优 detector。Riddles 这类短且均匀的任务适合 budget；MMLU 这类推理长度分布极宽的任务，compression/keyword 在同等或更低预算下更稳。
 
@@ -117,9 +117,10 @@ question
 计划中的优先级：
 
 1. **v0.1 release**：发布当前 Layer 1 方法、实验结果和 limitations。
-2. **BOCPD / change-point detector**：减少 magic threshold，这是 v0.2 的核心。
+2. **Offline replay gate**：新 detector / 新信号先用 synthetic 或 raw reasoning 文本本地 replay，避免每次都跑 API 实验。
 3. **Token calibration / cross-vendor sanity check**：让 total-token savings 更硬。
-4. **任务路由 / hybrid detector**：在叙事和成本测量稳定后再做。
+4. **Value/MDL detector exploration**：在不增加 LLM/embedding 调用、不破坏两阶段框架的前提下，探索更少 magic threshold 的 stopping rule。
+5. **任务路由 / hybrid detector**：在叙事和成本测量稳定后再做。
 
 ### 4. 核心洞察
 
@@ -347,7 +348,7 @@ docs/                     技术方案、调研、实验说明
 | [docs/release_v0_1.md](docs/release_v0_1.md) | v0.1 release notes 和 blog 大纲 |
 | [docs/plan.md](docs/plan.md) | milestone 执行计划 |
 | [docs/v0_1_milestone_status.md](docs/v0_1_milestone_status.md) | v0.1 状态快照 |
-| [docs/bocpd_design.md](docs/bocpd_design.md) | v0.2 BOCPD / change-point detector 设计草案 |
+| [docs/bocpd_design.md](docs/bocpd_design.md) | BOCPD / change-point detector 设计与 negative result |
 | [docs/bocpd_probe_20_report.md](docs/bocpd_probe_20_report.md) | BOCPD 20 题 probe 结果与下一步诊断 |
 | [docs/offline_detector_probe.md](docs/offline_detector_probe.md) | 本地 synthetic/raw reasoning detector replay |
 | [docs/survey.md](docs/survey.md) | Reasoning model overthinking 缓解方向调研 |

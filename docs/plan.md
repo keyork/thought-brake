@@ -23,7 +23,7 @@
 但项目还没有完成两个更高层目标：
 
 - 对外发布：创建 release/tag/blog，让别人理解、安装、复现实验
-- 数学美感：减少 magic threshold，推进到 BOCPD / change-point detector
+- 数学美感：减少 magic threshold。BOCPD 已作为 negative result 记录，下一步应转向 offline-first 的 value/MDL 方向，而不是继续直接跑 API probe
 
 因此后续不应继续无序增加 detector，而应按 milestone 推进。
 
@@ -77,9 +77,12 @@
 - report 不夸大 total-token savings 精度
 - README 不把 `compression@1000` 包装成理论最优
 
-## Milestone v0.2：BOCPD / Layer 2
+## Milestone v0.2：Offline-first Value / MDL 探索
 
-目标：回应最初“数学上更美、减少 magic number”的目标。
+目标：回应最初“数学上更美、减少 magic number”的目标，同时遵守两个原则：
+
+- 不引入额外 LLM 调用或 embedding 计算
+- 不破坏当前 Phase 1 monitor / interrupt / Phase 2 recovery 大框架
 
 ### 为什么需要 v0.2
 
@@ -90,46 +93,42 @@
 - LZ thresholds
 - consecutive windows
 
-这足够作为 v0.1 工程方案，但还没有真正解决 magic threshold 问题。BOCPD / change-point detection 的价值是把停止决策表述成 posterior change probability，而不是继续手调阈值。
+这足够作为 v0.1 工程方案，但还没有真正解决 magic threshold 问题。BOCPD 曾尝试把停止决策推进到 posterior change probability，但三轮 20 题 probe 的结果是 0 个 soft stop；enhanced-detail 显示 `conclusion`、`p_change`、`z` 三条核心条件都没有进入有效区域。因此 BOCPD 当前不再作为 v0.2 主线。
 
 ### v0.2 Scope
 
-- 实现一个 BOCPD-style detector
-- 输入仍然是 visible reasoning text 的在线特征
-- 先用 compression / LZ / repetition 等低维信号
-- 对比 `compression@1000`、`compression@300`、`keyword@1000`、`budget@300`
+- 先维护 offline replay gate
+- 对 synthetic overthinking trace 和 raw reasoning text 做 detector replay
+- 新 value/MDL 信号只使用本地文本统计，不调用 LLM / embedding
+- 只有离线 replay 能解释触发位置时，才进入 20 题 API probe
 
 ### v0.2 必做
 
-1. **写 Layer 2 设计文档** ✅
-   - signal definition
-   - hazard / prior
-   - online update
-   - stop criterion
-   - 与 magic threshold 的关系
+1. **Offline replay harness** ✅
+   - synthetic overthinking trace
+   - raw reasoning file replay
+   - 输出 stop position、verdict、detector detail
 
-2. **实现 BOCPD detector**
-   - 插入现有 detector 接口
-   - 支持 runner 实验
-   - 单测覆盖
+2. **记录 BOCPD negative result** ✅
+   - 0 个 soft stop
+   - `p_change` / `z` 远低于 stop rule
+   - 暂停 BOCPD 全量实验
 
-3. **小批量验证**
-   - 先跑 20-50 题
-   - 看是否稳定触发
-   - 看质量是否明显退化
+3. **设计 value/MDL detector**
+   - 不改变 `ReasoningDetector.update()` 接口
+   - 用本地信息增益 / novelty / repetition trend
+   - 停止边界来自 value/cost 比较，而不是再堆 magic threshold
 
-4. **与 Layer 1 比较**
-   - quality
-   - reasoning savings
-   - total-token savings
-   - trigger distribution
-   - failure examples
+4. **离线验证后再小批量 API probe**
+   - 先过 offline replay
+   - 再跑 20 题
+   - 最后才考虑全量
 
 ### v0.2 完成标准
 
-- 能回答 BOCPD 是否真的减少参数敏感性
-- 能回答 BOCPD 是否比 compression/keyword 更稳
-- 即使效果不超过 Layer 1，也能明确解释失败原因
+- 能回答 value/MDL 是否在合成 overthinking 上比现有信号更敏感
+- 能回答它是否保持 productive trace 不误停
+- 能解释每次 stop 的本地信号，而不是只给一个黑盒分数
 
 ## Milestone v0.3：Cost Calibration 与 Cross-vendor
 
@@ -186,13 +185,13 @@ balanced-aggressive: compression@300
 
 ## 当前下一步
 
-当前 v0.1 已经打 `v0.1.0` tag，release draft 已经落地；v0.2 BOCPD 设计文档也已启动。建议马上做：
+当前 v0.1 已经打 `v0.1.0` tag，release draft 已经落地；BOCPD 已记录为 negative result。建议马上做：
 
 1. 创建 GitHub Release，内容使用 `docs/release_v0_1.md`
-2. 评审 `docs/bocpd_design.md`，确认 v0.2 的最小实现范围
+2. 使用 [offline_detector_probe.md](offline_detector_probe.md) 作为新信号 gate
 3. 实现 BOCPD feature extraction 和 `OnlineChangePoint` core ✅
 4. 接入 `BOCPDDetector` ✅
 5. 在 schema v4 里记录 `stop_detail`，用于观察 `p_change/z/r_map` ✅
 6. schema v3/v4/enhanced-detail 的 20 题 BOCPD probe 已完成：0 个 soft stop，当前 BOCPD 退化成 hard fallback；结论见 [bocpd_probe_20_report.md](bocpd_probe_20_report.md)
-7. BOCPD 暂停作为 v0.2 主线；下一步转向 cost calibration 或 cross-vendor sanity check
+7. BOCPD 暂停作为 v0.2 主线；新方法先走 offline replay / value-MDL 设计，主线评测增强则转向 cost calibration 或 cross-vendor sanity check
 8. 新 detector / 新信号必须先走 offline replay，不再直接跑 API probe；说明见 [offline_detector_probe.md](offline_detector_probe.md)

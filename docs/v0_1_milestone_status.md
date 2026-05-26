@@ -7,7 +7,7 @@
 当前阶段定义：
 
 - v0.1：Layer 1 literal text detectors，默认策略 `compression@1000`，已打 `v0.1.0` tag
-- v0.2：BOCPD / change-point detector，目标是减少 magic threshold；设计草案见 [bocpd_design.md](bocpd_design.md)
+- v0.2：offline replay gate + value/MDL-style 本地信号探索；BOCPD 已记录为 negative result，设计和失败分析见 [bocpd_design.md](bocpd_design.md)
 - v0.3：token calibration + cross-vendor sanity check
 
 ## 1. 当前一句话定位
@@ -361,7 +361,7 @@ v0.1 tag 之后已经补上最小代码骨架：
 
 目前看 v0.1 优先级较低，因为 compression/keyword 已经能支撑当前 main claim。
 
-但 BOCPD 仍然只是 v0.2 起点，尚未跑真实 API probe。它对应最初“数学上更美、减少 magic threshold”的目标。当前 `compression@1000` / `compression@300` 仍然有 `@1000` / `@300`、压缩阈值、连续窗口数等参数；BOCPD 的价值在于把停止决策推进到变化点检测和 posterior odds，而不是继续手调阈值。
+后续已经跑过 schema v3 / schema v4 / enhanced-detail 三轮 20 题 probe，结果是 negative：0 个 BOCPD soft stop，所有截断都来自 hard fallback。enhanced-detail 显示 `conclusion=0` 覆盖所有 treated rows，`p_change` 和 `z` 也远低于 stop rule。因此 BOCPD 当前不能作为 v0.2 主线，只能作为 negative result / future work 记录。
 
 ### 6. Provider-specific Tokenizer / Billing-grade Cost
 
@@ -379,7 +379,7 @@ v0.1 tag 之后已经补上最小代码骨架：
 
 已有 detector 足够支撑 v0.1 main contribution。继续无序增加 embedding / oscillation 等功能会让项目发散。
 
-但 BOCPD 不应和普通 detector expansion 混为一谈。它对应的是 Layer 2：减少 magic threshold，提高方法的统计解释性。按最初目标“真实工程问题 + 数学上美丽 + 黑盒 API 可用”来看，BOCPD 是 v0.2 的核心 milestone。
+BOCPD 不应继续作为当前核心 milestone。它的 negative result 说明：仅套一个更复杂的统计框架不够，必须先验证可见文本信号是否在离线 replay 上有效。下一步应转向 offline-first 的 value/MDL 本地信号探索。
 
 ### 现在最该做的是收敛叙事
 
@@ -475,15 +475,17 @@ quality
 - [release_v0_1.md](release_v0_1.md)
 - README public-facing narrative
 
-### Step 5：把 BOCPD 作为 v0.2 设计文档落地
+### Step 5：记录 BOCPD negative result，并建立 offline replay gate ✅
 
-不是 vague future work，而是明确：
+当前 milestone 应更新为：
 
 ```text
 v0.1: Layer 1 literal text detectors, compression@1000 default
-v0.2: BOCPD threshold-reduced detector
+v0.2: offline replay gate + value/MDL local signal exploration
 v0.3: token calibration + cross-vendor validation
 ```
+
+`experiments/offline_detector_probe.py` 已落地。它说明当前有效的是“离线评估流程”：能快速筛掉 BOCPD、compression/ngram/semantic 在 synthetic overthinking 上的 missed case；但新的 value/MDL detector 还没有实现，不能 claim 新停止算法已经有效。
 
 ### Step 6：再考虑 router
 

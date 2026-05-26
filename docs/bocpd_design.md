@@ -2,7 +2,7 @@
 
 日期：2026-05-25
 
-状态：v0.2 设计草案；最小代码骨架已实现；schema v3 的 20 题 probe 已完成但未触发 BOCPD soft stop
+状态：v0.2 设计草案；最小代码骨架已实现；schema v3 / schema v4 / enhanced-detail 三轮 20 题 probe 均未触发 BOCPD soft stop，当前记录为 negative result
 
 ## 1. 目标
 
@@ -25,6 +25,8 @@ v0.2 的目标不是继续堆 detector，而是把“何时进入低收益推理
 > reasoning stream 的统计特征从“信息推进阶段”切换到“重复 / 犹豫 / 低信息密度阶段”时，客户端应提升 stop probability，并在 posterior 足够高时中断。
 
 BOCPD 的价值是：把停止决策从单个手工阈值，推进为对“状态切换”的在线 posterior 估计。
+
+当前结论：这个思路本身仍有研究价值，但当前可见文本信号没有支撑它。三轮 probe 都是 0 个 soft stop，enhanced-detail 显示 `conclusion`、`p_change` 和 `z` 都没有进入 stop rule 的有效区域。因此本文档保留设计和失败原因，不再把 BOCPD 作为当前 v0.2 主线。
 
 ## 2. 非目标
 
@@ -458,7 +460,7 @@ OUTPUT=experiments/results/bocpd_probe_20_v4_detail.jsonl \
 
 ## 10. 判断标准
 
-BOCPD 值得进入 v0.2 mainline 的条件：
+BOCPD 原本值得进入 v0.2 mainline 的条件：
 
 1. Quality 不明显低于 `compression@1000`
 2. TokenSavings 高于或接近 `compression@1000`

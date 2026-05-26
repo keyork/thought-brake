@@ -14,6 +14,22 @@ BOCPD probe 暴露了一个问题：如果每次都等真实 API 实验跑完，
 2. 有 raw reasoning 历史文本时，直接读取本地文件 replay。
 3. 只有离线 replay 能解释触发位置和 detail 时，才进入真实 API probe。
 
+## 当前结论
+
+这个 replay 方法是有效的研发 gate：它不证明线上 token savings，但能快速筛掉明显无效的信号。
+
+最新 synthetic replay 结果：
+
+| detector | overthinking trace | productive trace | 判断 |
+|---|---|---|---|
+| `keyword` | `ok_stop` | `ok_no_stop` | 离线 sanity 通过 |
+| `compression` | `missed` | `ok_no_stop` | 当前 synthetic trace 上不敏感 |
+| `ngram` | `missed` | `ok_no_stop` | 当前 synthetic trace 上不敏感 |
+| `semantic` | `missed` | `ok_no_stop` | 当前 synthetic trace 上不敏感 |
+| `bocpd` | `missed` | `ok_no_stop` | 当前信号不支持 BOCPD soft stop |
+
+因此目前有效的是“离线评估流程”，不是一个新的 value/MDL 停止算法。value/MDL detector 还没有实现；如果实现，必须先在这里跑通，再进入 API probe。
+
 ## 运行
 
 默认使用内置 synthetic traces：

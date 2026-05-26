@@ -37,6 +37,19 @@ report.
 ./experiments/run_token_main.sh
 ```
 
+## 2.5 Offline Detector Replay
+
+Before adding a new detector or signal to API experiments, run it locally on
+synthetic or saved raw reasoning text:
+
+```bash
+uv run python experiments/offline_detector_probe.py
+```
+
+This does not measure token savings and does not replace real experiments. It is
+a cheap gate: if a signal cannot trigger on a known overthinking trace, do not
+spend API calls on a probe.
+
 Defaults:
 
 ```text

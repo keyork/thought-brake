@@ -71,7 +71,7 @@ v0.1 实现并比较了 5 类 detector：
 
 `compression@1000`、`keyword@300` 里的数字是 safety budget / fallback hard-limit 相关配置，单位是 reasoning chars。对 signal detector 来说，真正停止点由 detector signal 决定；fallback budget 只是避免没有信号时无限推理。
 
-这仍然是 v0.1 的局限：当前方法有阈值和 safety budget。v0.2 会用 BOCPD / change-point detector 尝试减少 magic threshold。
+这仍然是 v0.1 的局限：当前方法有阈值和 safety budget。BOCPD / change-point detector 已经作为 v0.2 候选做过小批量验证，但当前信号没有触发 posterior soft stop，因此后续应先走 offline replay gate，再探索 value/MDL-style 本地信号。
 
 ## 3. 实验设置
 
@@ -258,10 +258,10 @@ v0.1 release closeout：
 
 v0.2：
 
-1. 写 BOCPD / change-point detector 设计文档
-2. 实现 Layer 2 detector
-3. 小批量验证 20-50 题
-4. 与 `compression@1000`、`compression@300`、`keyword@1000`、`budget@300` 对比
+1. 使用 offline replay 作为新 detector / 新信号 gate
+2. 记录 BOCPD negative result，不把它作为当前 mainline contribution
+3. 在不增加 LLM / embedding 调用的约束下，探索 value/MDL-style 本地文本信号
+4. 只有离线 replay 通过后，才进入 20 题 API probe
 
 v0.3：
 

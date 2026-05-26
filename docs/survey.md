@@ -96,14 +96,15 @@ hidden states / logits 方法通常更强，因为它们直接观察模型内部
 
 ## 5. 推荐研发顺序
 
-当前 baseline、Phase 2 direct recovery、Layer 1 detector 对照已经完成。后续顺序应改为：
+当前 baseline、Phase 2 direct recovery、Layer 1 detector 对照已经完成。BOCPD 小批量 probe 已经给出 negative result：当前可见文本特征没有触发 posterior soft stop。因此后续顺序应改为：
 
 1. 收敛 v0.1 发布叙事：client-side + black-box API + visible reasoning text。
 2. 补齐相关工作对比：EAT、内部信号方法、proxy-model 方法、compression-style 方法。
 3. 升级最终 report：明确 TokenSavings 不确定性、Phase 2 failure 定义和 Pareto frontier。
-4. 实现 Layer 2 / BOCPD，检验是否能减少 magic threshold。
-5. 做 token calibration 和 cross-vendor sanity check。
-6. 最后再考虑 task router、answer oscillation、embedding redundancy。
+4. 新 detector / 新信号先走 offline replay，避免直接跑 API probe。
+5. 在不引入额外 LLM / embedding 调用的前提下探索 value/MDL-style 本地文本信号。
+6. 做 token calibration 和 cross-vendor sanity check。
+7. 最后再考虑 task router、answer oscillation、embedding redundancy。
 
 ## 6. 关键风险
 
@@ -116,4 +117,4 @@ hidden states / logits 方法通常更强，因为它们直接观察模型内部
 
 ## 7. 一句话总结
 
-客户端流式文本信号是合理方向。v0.1 应先发布已经验证的 Layer 1；v0.2 再用 BOCPD / change-point detection 回应“减少 magic threshold”的研究目标。
+客户端流式文本信号是合理方向。v0.1 应先发布已经验证的 Layer 1；v0.2 不应继续直接押注 BOCPD，而应先建立 offline replay gate，再探索不增加额外模型调用的 value/MDL-style stopping rule。

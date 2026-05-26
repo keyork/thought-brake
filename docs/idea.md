@@ -1,6 +1,6 @@
 # 研发路线：从可靠基线到任务自适应早停
 
-本文档记录 `thought-brake` 研发路线。当前核心判断是：**没有"最优 detector"，只有"某个质量/成本目标下的最优策略"。** 最新主线 token 实验把默认策略收敛到 `compression@1000`，`compression@300` 则成为更激进的 balanced-aggressive 策略。接下来先收敛 v0.1 发布叙事，再把 BOCPD 作为 v0.2 明确推进；具体执行计划见 [plan.md](plan.md)。
+本文档记录 `thought-brake` 研发路线。当前核心判断是：**没有"最优 detector"，只有"某个质量/成本目标下的最优策略"。** 最新主线 token 实验把默认策略收敛到 `compression@1000`，`compression@300` 则成为更激进的 balanced-aggressive 策略。BOCPD 已经完成小批量验证，但结果是 negative：没有触发 posterior soft stop。因此下一步不再直接跑新 API probe，而是先用 offline replay gate 验证新信号；具体执行计划见 [plan.md](plan.md)。
 
 最新主线实验结论：
 
@@ -213,9 +213,9 @@ class ReasoningDetector(Protocol):
 Phase C 实验表明：**没有万能最优 detector，任务类型和质量/成本目标共同决定策略。** 下一步不是继续无序增加 detector，而是分成两个明确阶段：
 
 1. v0.1：发布 Layer 1，强调 client-side + black-box API + visible reasoning text 的工程 niche。
-2. v0.2：实现 BOCPD / change-point detector，回应最初“数学上更美、减少 magic threshold”的目标。
+2. v0.2：先使用 offline replay gate 验证新信号，再探索 value/MDL-style 本地停止规则，回应“数学上更美、减少 magic threshold”的目标。
 
-任务路由仍然重要，但应排在 v0.1 叙事收敛和 v0.2 BOCPD 之后。
+任务路由仍然重要，但应排在 v0.1 叙事收敛和 v0.2 信号验证之后。
 
 #### 方向 1：v0.1 发布与叙事收敛（当前最高优先级）
 
@@ -227,15 +227,17 @@ Phase C 实验表明：**没有万能最优 detector，任务类型和质量/成
 - 明确和 EAT、内部信号方法、proxy-model 方法的差异
 - 明确 limitations：token estimate uncertainty、single-vendor evidence
 
-#### 方向 2：BOCPD / Layer 2（数学美感主线）
+#### 方向 2：Offline replay + Value/MDL（数学美感主线）
 
-BOCPD 是当前最值得保留的研究增量。它不是“再加一个 detector”，而是尝试把停止判据从手调阈值推进到在线变化点检测。
+BOCPD 已经证明 skeleton 能跑，但三轮 20 题 probe 都没有触发 soft stop；enhanced-detail 显示 `conclusion`、`p_change` 和 `z` 都没有进入有效区域。因此它当前是 negative result，不是 v0.2 主线。
+
+下一步更合理的是 offline-first 的本地信号探索：先用 synthetic overthinking / raw reasoning replay 验证信号，再决定是否进入真实 API probe。候选方向是 value/MDL-style detector，把“继续生成是否还有信息收益”作为本地文本统计问题，而不是直接再堆一个阈值 detector。
 
 目标：
 
-- 减少 `@300`、压缩阈值、连续窗口数等 magic parameters 的主导地位
-- 用 posterior change probability 描述过度推理阶段切换
-- 和 `compression@300` / `keyword@300` / `budget@300` 做直接对比
+- 不引入额外 LLM 调用或 embedding 计算
+- 不破坏现有 Phase 1 monitor / interrupt / Phase 2 direct recovery 框架
+- 新信号先通过 offline replay，再做 20 题 API probe
 
 #### 方向 3：任务分类路由
 
@@ -272,7 +274,7 @@ PUMA（arXiv:2605.17672）用 embedding 相似度检测语义冗余：
 - 对多选题（MMLU）特别适用——可以直接监控 A/B/C/D 的出现频率
 - MMLU 上 keyword@300 已经 100%，但 oscillation 可能提供更优雅的信号
 
-**推荐优先级**：方向 1（v0.1 发布）> 方向 2（BOCPD / Layer 2）> 方向 3（cost calibration + cross-vendor）> 方向 4（任务路由）> 方向 5（hybrid）> 方向 6（oscillation / embedding）
+**推荐优先级**：方向 1（v0.1 发布）> 方向 2（offline replay + value/MDL 本地信号）> 方向 3（cost calibration + cross-vendor）> 方向 4（任务路由）> 方向 5（hybrid）> 方向 6（oscillation / embedding）
 
 ## 5. Compression Detector Layer 1
 
@@ -309,12 +311,13 @@ STOP if CRD < theta_crd OR LZ_ratio < theta_lz
 
 ## 7. 当前优先级
 
-Phase A ✅ → Phase B ✅ → Phase C ✅（主线 token 实验完成）→ v0.1 发布准备中
+Phase A ✅ → Phase B ✅ → Phase C ✅（主线 token 实验完成）→ v0.1 发布准备中 → offline replay gate ✅
 
 下一步：
 
 1. **v0.1 发布叙事** — README、final report、strategy map、limitations、quickstart。
 2. **文献 claims 逐条核验** — 尤其是 EAT、内部信号方法、proxy-model 方法。
-3. **BOCPD 设计文档** — 明确 v0.2 的 signal、posterior update、stop criterion 和实验计划。
-4. **Cost calibration** — 用 calibration run 或更贴近 provider 的 tokenizer 降低当前约 15% MAE。
-5. **Cross-vendor sanity check** — 至少再用一个 LLM API 做小规模验证。
+3. **Offline replay 作为新信号 gate** — synthetic/raw reasoning 先本地 replay，不再直接跑 API probe。
+4. **Value/MDL 本地信号设计** — 遵守不增加 LLM/embedding 调用、不破坏现有两阶段框架。
+5. **Cost calibration** — 用 calibration run 或更贴近 provider 的 tokenizer 降低当前约 15% MAE。
+6. **Cross-vendor sanity check** — 至少再用一个 LLM API 做小规模验证。
