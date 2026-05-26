@@ -397,11 +397,11 @@ bocpd p_change=... z=... r_map=...
 
 关键发现：
 
-- schema v4 `bocpd@300`：Quality 89.2%，TokenSavings 21.5%，Lost=7
-- schema v4 `bocpd@1000`：Quality 97.5%，TokenSavings 10.3%，Lost=2
+- enhanced-detail `bocpd@300`：Quality 93.3%，TokenSavings 15.5%，Lost=3
+- enhanced-detail `bocpd@1000`：Quality 96.7%，TokenSavings -2.9%，Lost=1
 - 0 个 `soft` stop；所有截断都来自 `hard` fallback
 
-因此这轮 probe 只能证明 BOCPD skeleton 能跑通，不能证明 change-point stop rule 有效。`bocpd@1000` 的数值可记录，但不能作为 BOCPD 胜出证据，因为没有任何样本由 posterior soft stop 触发。下一轮必须用增强后的 detail 重新跑，观察 `p_change/z/r_map` 和 blocked condition。
+因此这几轮 probe 只能证明 BOCPD skeleton 能跑通，不能证明 change-point stop rule 有效。增强诊断显示 `conclusion=0` 覆盖 120/120 个 treated rows，`p_change` 最大 0.055，`z` 最大 0.254，远低于当前 stop rule。下一步不应继续 rerun 同一 BOCPD probe，而应把它记录为 negative result，除非先重新设计信号或记录 raw reasoning text 做离线标定。
 
 ### Step 7：Report Support ✅
 
@@ -504,7 +504,7 @@ BOCPD 值得进入 v0.2 mainline 的条件：
 
 - 20 题 schema v3 probe ✅，结论是不触发 soft stop
 - 20 题 schema v4 diagnostic probe ✅，结论仍是不触发 soft stop
-- 20 题 enhanced-detail probe ⏳
+- 20 题 enhanced-detail probe ✅，结论是当前信号整体没有进入 stop rule 有效区域
 - 与 v0.1 default 对比
 - trigger/failure examples
 
