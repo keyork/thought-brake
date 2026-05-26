@@ -349,6 +349,7 @@ docs/                     技术方案、调研、实验说明
 | [docs/v0_1_milestone_status.md](docs/v0_1_milestone_status.md) | v0.1 状态快照 |
 | [docs/bocpd_design.md](docs/bocpd_design.md) | v0.2 BOCPD / change-point detector 设计草案 |
 | [docs/bocpd_probe_20_report.md](docs/bocpd_probe_20_report.md) | BOCPD 20 题 probe 结果与下一步诊断 |
+| [docs/offline_detector_probe.md](docs/offline_detector_probe.md) | 本地 synthetic/raw reasoning detector replay |
 | [docs/survey.md](docs/survey.md) | Reasoning model overthinking 缓解方向调研 |
 | [docs/idea.md](docs/idea.md) | 研发路线和 roadmap |
 | [docs/experiments.md](docs/experiments.md) | 实验运行指南 |

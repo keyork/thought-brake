@@ -195,3 +195,4 @@ balanced-aggressive: compression@300
 5. 在 schema v4 里记录 `stop_detail`，用于观察 `p_change/z/r_map` ✅
 6. schema v3/v4/enhanced-detail 的 20 题 BOCPD probe 已完成：0 个 soft stop，当前 BOCPD 退化成 hard fallback；结论见 [bocpd_probe_20_report.md](bocpd_probe_20_report.md)
 7. BOCPD 暂停作为 v0.2 主线；下一步转向 cost calibration 或 cross-vendor sanity check
+8. 新 detector / 新信号必须先走 offline replay，不再直接跑 API probe；说明见 [offline_detector_probe.md](offline_detector_probe.md)
