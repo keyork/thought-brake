@@ -15,6 +15,8 @@ def test_defaults() -> None:
     assert cfg.compression_theta_crd == 0.7
     assert cfg.compression_theta_lz == 0.5
     assert cfg.compression_consecutive_windows == 2
+    assert cfg.bocpd_window_chars == 200
+    assert cfg.bocpd_stop_prob == 0.65
     assert cfg.final_answer_prompt
     assert cfg.clean_phase2_answer is True
     assert cfg.phase2_mode == "direct"
@@ -64,6 +66,21 @@ def test_from_env_overrides_runtime_config() -> None:
             "THOUGHT_BRAKE_SEMANTIC_JACCARD_THRESHOLD": "0.45",
             "THOUGHT_BRAKE_SEMANTIC_CONSECUTIVE_WINDOWS": "4",
             "THOUGHT_BRAKE_SEMANTIC_MIN_WORDS": "6",
+            "THOUGHT_BRAKE_BOCPD_WINDOW_CHARS": "120",
+            "THOUGHT_BRAKE_BOCPD_MIN_WINDOWS": "3",
+            "THOUGHT_BRAKE_BOCPD_MAX_RUN_LENGTH": "20",
+            "THOUGHT_BRAKE_BOCPD_HAZARD_LAMBDA": "9.5",
+            "THOUGHT_BRAKE_BOCPD_STOP_PROB": "0.7",
+            "THOUGHT_BRAKE_BOCPD_RECENT_RUN_THRESHOLD": "2",
+            "THOUGHT_BRAKE_BOCPD_LOW_VALUE_THRESHOLD": "0.6",
+            "THOUGHT_BRAKE_BOCPD_OBSERVATION_SIGMA": "0.09",
+            "THOUGHT_BRAKE_BOCPD_PRIOR_MEAN": "0.4",
+            "THOUGHT_BRAKE_BOCPD_PRIOR_SIGMA": "0.25",
+            "THOUGHT_BRAKE_BOCPD_COMPRESSION_WEIGHT": "0.2",
+            "THOUGHT_BRAKE_BOCPD_LZ_WEIGHT": "0.3",
+            "THOUGHT_BRAKE_BOCPD_NGRAM_WEIGHT": "0.25",
+            "THOUGHT_BRAKE_BOCPD_KEYWORD_WEIGHT": "0.15",
+            "THOUGHT_BRAKE_BOCPD_CONCLUSION_WEIGHT": "0.1",
             "THOUGHT_BRAKE_FINALIZE_HINT": "\nfinalize now",
             "THOUGHT_BRAKE_REASONING_START_TAG": "<reasoning>",
             "THOUGHT_BRAKE_REASONING_END_TAG": "</reasoning>",
@@ -110,6 +127,21 @@ def test_from_env_overrides_runtime_config() -> None:
     assert cfg.semantic_jaccard_threshold == 0.45
     assert cfg.semantic_consecutive_windows == 4
     assert cfg.semantic_min_words == 6
+    assert cfg.bocpd_window_chars == 120
+    assert cfg.bocpd_min_windows == 3
+    assert cfg.bocpd_max_run_length == 20
+    assert cfg.bocpd_hazard_lambda == 9.5
+    assert cfg.bocpd_stop_prob == 0.7
+    assert cfg.bocpd_recent_run_threshold == 2
+    assert cfg.bocpd_low_value_threshold == 0.6
+    assert cfg.bocpd_observation_sigma == 0.09
+    assert cfg.bocpd_prior_mean == 0.4
+    assert cfg.bocpd_prior_sigma == 0.25
+    assert cfg.bocpd_compression_weight == 0.2
+    assert cfg.bocpd_lz_weight == 0.3
+    assert cfg.bocpd_ngram_weight == 0.25
+    assert cfg.bocpd_keyword_weight == 0.15
+    assert cfg.bocpd_conclusion_weight == 0.1
     assert cfg.finalize_hint == "\nfinalize now"
     assert cfg.reasoning_start_tag == "<reasoning>"
     assert cfg.reasoning_end_tag == "</reasoning>"

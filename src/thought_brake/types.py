@@ -35,6 +35,7 @@ class Phase1Result:
     reasoning: str
     content: str  # non-empty only when stop_reason is NATURAL
     stop_reason: StopReason
+    stop_detail: str = ""
     usage: TokenUsage = field(default_factory=TokenUsage)
 
 
@@ -51,6 +52,7 @@ class Phase2Result:
 class RequestMetrics:
     reasoning_chars: int = 0
     stop_reason: StopReason = StopReason.NATURAL
+    stop_detail: str = ""
     phase2_used: bool = False
     phase2_failed: bool = False
     phase1_prompt_tokens: int | None = None

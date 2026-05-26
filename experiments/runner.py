@@ -53,6 +53,7 @@ class Record:
     reasoning_chars: int
     truncated: bool
     stop_reason: str
+    stop_detail: str
     answer: str
     answer_chars: int
     phase1_prompt_tokens: int | None
@@ -129,6 +130,7 @@ def _run_one(
         reasoning_chars=resp.metrics.reasoning_chars,
         truncated=resp.metrics.stop_reason != StopReason.NATURAL,
         stop_reason=resp.metrics.stop_reason.value,
+        stop_detail=resp.metrics.stop_detail,
         answer=resp.content,
         answer_chars=len(resp.content),
         phase1_prompt_tokens=resp.metrics.phase1_prompt_tokens,

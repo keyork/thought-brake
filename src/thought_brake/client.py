@@ -112,6 +112,7 @@ class ThoughtBrakeClient:
         metrics = RequestMetrics(
             reasoning_chars=len(phase1.reasoning),
             stop_reason=phase1.stop_reason,
+            stop_detail=phase1.stop_detail,
             phase1_prompt_tokens=phase1.usage.prompt_tokens,
             phase1_completion_tokens=phase1.usage.completion_tokens,
             phase1_total_tokens=phase1.usage.total_tokens,

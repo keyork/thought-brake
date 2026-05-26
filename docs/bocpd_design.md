@@ -2,7 +2,7 @@
 
 日期：2026-05-25
 
-状态：v0.2 设计草案；最小代码骨架已实现，真实 API probe 尚未运行
+状态：v0.2 设计草案；最小代码骨架已实现；schema v3 的 20 题 probe 已完成但未触发 BOCPD soft stop
 
 ## 1. 目标
 
@@ -381,11 +381,29 @@ uv run python experiments/runner.py \
 
 可以直接运行。
 
-### Step 5：Probe Run ⏳
+### Step 5：Probe Diagnostics ✅
 
-下一步需要跑 20-50 题真实 API probe，验证触发是否稳定。
+已补 `stop_detail` 到 metrics / JSONL schema v4。下一轮 BOCPD probe 会记录：
 
-### Step 6：Report Support
+```text
+bocpd p_change=... z=... r_map=...
+```
+
+这能直接回答真实流上 soft stop 为什么触发或不触发。
+
+### Step 6：Probe Run ⚠️
+
+已跑 `experiments/results/bocpd_probe_20.jsonl`，结果见 [bocpd_probe_20_report.md](bocpd_probe_20_report.md)。
+
+关键发现：
+
+- `bocpd@300`：Quality 88.3%，TokenSavings 19.6%，Lost=7
+- `bocpd@1000`：Quality 96.7%，TokenSavings 2.7%，Lost=3
+- 0 个 `soft` stop；所有截断都来自 `hard` fallback
+
+因此这轮 probe 只能证明 BOCPD skeleton 能跑通，不能证明 change-point stop rule 有效。下一轮必须用 schema v4 重新跑，观察 `stop_detail` 里的 `p_change/z/r_map`。
+
+### Step 7：Report Support ✅
 
 `report_full_main.py` 当前聚焦 full budget/compression/keyword 文件。BOCPD 初期建议新建 focused report：
 
@@ -393,23 +411,16 @@ uv run python experiments/runner.py \
 experiments/report_bocpd_probe.py
 ```
 
-先不要污染 v0.1 main report。
+先不要污染 v0.1 main report。当前已先落地手工结论文档 [bocpd_probe_20_report.md](bocpd_probe_20_report.md)。
 
 ## 9. 实验计划
 
 ### Probe Run
 
-第一轮小批量：
+下一轮小批量需要写到新文件，避免和 schema v3 结果混用：
 
 ```bash
-uv run python experiments/runner.py \
-  --dataset all \
-  --n 20 \
-  --budgets 300,1000 \
-  --detector bocpd \
-  --workers 10 \
-  --track-usage \
-  --output experiments/results/bocpd_probe.jsonl
+N=20 WORKERS=10 ./experiments/run_bocpd_probe.sh
 ```
 
 目标不是赢，而是看：
@@ -490,7 +501,8 @@ BOCPD 值得进入 v0.2 mainline 的条件：
 
 实验：
 
-- 20-50 题 probe ⏳
+- 20 题 schema v3 probe ✅，结论是不触发 soft stop
+- 20-50 题 schema v4 diagnostic probe ⏳
 - 与 v0.1 default 对比
 - trigger/failure examples
 

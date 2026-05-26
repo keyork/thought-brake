@@ -29,6 +29,7 @@ def stream_and_monitor(
     content_buf: list[str] = []
     reasoning_chars = 0
     stop_reason = StopReason.NATURAL
+    stop_detail = ""
     active_detector = detector or build_detector(config)
     usage = None
 
@@ -65,6 +66,7 @@ def stream_and_monitor(
                 reasoning_chars += len(reasoning_piece)
 
                 decision = active_detector.update(reasoning_piece, reasoning_chars)
+                stop_detail = decision.detail
                 if decision.should_stop:
                     stop_reason = decision.reason
                     break
@@ -74,10 +76,12 @@ def stream_and_monitor(
         # Network interruption or JSON parse failure: return whatever was collected.
         # Phase 2 will attempt to salvage the partial reasoning.
         stop_reason = StopReason.INTERRUPTED
+        stop_detail = "stream_interrupted"
 
     return Phase1Result(
         reasoning="".join(reasoning_buf),
         content="".join(content_buf),
         stop_reason=stop_reason,
+        stop_detail=stop_detail,
         usage=usage or TokenUsage(),
     )

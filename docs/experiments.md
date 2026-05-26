@@ -28,8 +28,10 @@ Runtime tuning can stay on defaults for the first run. Change the detector, budg
 
 ## 2. Run the Clean Main Token Experiment
 
-This is the current recommended experiment entrypoint. It writes schema v3 rows
-with token fields and then builds the focused report.
+This is the current recommended experiment entrypoint. New runs write schema v4
+rows with token fields and `stop_detail`, then build the focused report. The
+v0.1 full-run files were produced with schema v3 and remain valid for the v0.1
+report.
 
 ```bash
 ./experiments/run_token_main.sh
@@ -216,6 +218,7 @@ Important fields in each JSONL record:
 | `reasoning_chars` | Collected reasoning character count |
 | `truncated` | Whether early stopping was triggered |
 | `stop_reason` | `natural`, `soft`, `hard`, or `interrupted` |
+| `stop_detail` | Detector diagnostic detail, e.g. BOCPD `p_change`, `z`, and `r_map` |
 | `answer` | Final answer returned by the client |
 | `answer_chars` | Character length of the final answer |
 | `phase1_*_tokens` | API usage returned for Phase 1 when available |

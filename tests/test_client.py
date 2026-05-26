@@ -55,6 +55,7 @@ def test_soft_truncation_triggers_phase2() -> None:
 
     assert resp.content == "phase2 answer"
     assert resp.metrics.stop_reason == StopReason.SOFT
+    assert resp.metrics.stop_detail == "soft_budget=5"
     assert resp.metrics.phase2_used
     assert not resp.metrics.phase2_failed
     assert client._openai.chat.completions.create.call_count == 2

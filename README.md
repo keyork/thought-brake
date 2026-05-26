@@ -20,7 +20,7 @@ v0.1 的核心定位：
 
 ### 主线 token 实验
 
-当前主线实验覆盖 `math=100`、`mmlu=100`、`riddle=100`，每个策略配置共 300 条样本，使用 `direct` Phase 2，并记录 schema v3 token 字段。运行主线实验并生成报告：
+当前 v0.1 主线实验覆盖 `math=100`、`mmlu=100`、`riddle=100`，每个策略配置共 300 条样本，使用 `direct` Phase 2，并记录 schema v3 token 字段。v0.2 新运行会写 schema v4，并额外记录 detector `stop_detail`。运行主线实验并生成报告：
 
 ```bash
 ./experiments/run_token_main.sh
@@ -348,6 +348,7 @@ docs/                     技术方案、调研、实验说明
 | [docs/plan.md](docs/plan.md) | milestone 执行计划 |
 | [docs/v0_1_milestone_status.md](docs/v0_1_milestone_status.md) | v0.1 状态快照 |
 | [docs/bocpd_design.md](docs/bocpd_design.md) | v0.2 BOCPD / change-point detector 设计草案 |
+| [docs/bocpd_probe_20_report.md](docs/bocpd_probe_20_report.md) | BOCPD 20 题 probe 结果与下一步诊断 |
 | [docs/survey.md](docs/survey.md) | Reasoning model overthinking 缓解方向调研 |
 | [docs/idea.md](docs/idea.md) | 研发路线和 roadmap |
 | [docs/experiments.md](docs/experiments.md) | 实验运行指南 |

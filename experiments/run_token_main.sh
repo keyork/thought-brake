@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Clean main experiment for schema v3.
+# Clean main experiment for the current result schema.
 # It records API usage when the LLM API supports streaming usage and also writes
 # local estimated token fields for every row.
 #

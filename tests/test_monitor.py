@@ -39,6 +39,7 @@ def test_soft_truncation_at_sentence_boundary() -> None:
     ]
     result = stream_and_monitor(_mock_client(chunks), "model", [], cfg)
     assert result.stop_reason == StopReason.SOFT
+    assert result.stop_detail == "soft_budget=10"
     assert result.content == ""
     assert "this should not be collected" not in result.reasoning
 
@@ -53,6 +54,7 @@ def test_hard_truncation() -> None:
     ]
     result = stream_and_monitor(_mock_client(chunks), "model", [], cfg)
     assert result.stop_reason == StopReason.HARD
+    assert result.stop_detail == "hard_limit=10"
     assert "should not appear" not in result.reasoning
 
 
@@ -116,5 +118,6 @@ def test_stream_error_after_partial_reasoning_is_interrupted() -> None:
 
     result = stream_and_monitor(client, "model", [], EarlyStopConfig())
     assert result.stop_reason == StopReason.INTERRUPTED
+    assert result.stop_detail == "stream_interrupted"
     assert result.reasoning == "partial"
     assert result.content == ""

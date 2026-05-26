@@ -15,7 +15,7 @@
 - early interrupt
 - two-phase final-answer recovery
 - 5 类 detector
-- schema v3 token metrics
+- schema v3 token metrics; schema v4 adds detector `stop_detail`
 - focused report 和 12 张证据型可视化
 - v0.1 research report draft
 - 73 个测试
@@ -192,4 +192,6 @@ balanced-aggressive: compression@300
 2. 评审 `docs/bocpd_design.md`，确认 v0.2 的最小实现范围
 3. 实现 BOCPD feature extraction 和 `OnlineChangePoint` core ✅
 4. 接入 `BOCPDDetector` ✅
-5. 跑 20-50 题 probe
+5. 在 schema v4 里记录 `stop_detail`，用于观察 `p_change/z/r_map` ✅
+6. schema v3 的 20 题 BOCPD probe 已完成：0 个 soft stop，当前 BOCPD 退化成 hard fallback；结论见 [bocpd_probe_20_report.md](bocpd_probe_20_report.md)
+7. 下一步用 schema v4 重新跑 diagnostic probe，观察 `stop_detail` 里的 `p_change/z/r_map`
