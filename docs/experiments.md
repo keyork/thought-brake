@@ -212,7 +212,7 @@ Important fields in each JSONL record:
 | `schema_version` | Result schema version; analysis keeps the latest version when mixed |
 | `question_id` | Dataset-local question id |
 | `budget` | Soft budget; `0` means baseline |
-| `detector` | `none`, `budget`, `compression`, `ngram`, `keyword`, or `semantic` |
+| `detector` | `none`, `budget`, `compression`, `ngram`, `keyword`, `semantic`, or experimental `bocpd` |
 | `reasoning_chars` | Collected reasoning character count |
 | `truncated` | Whether early stopping was triggered |
 | `stop_reason` | `natural`, `soft`, `hard`, or `interrupted` |
@@ -225,7 +225,7 @@ Important fields in each JSONL record:
 | `token_usage_source` | `api`, `estimate`, or `none` |
 | `quality_score` | Evaluation score; `-1` when `--skip-eval` is used |
 | `latency_ms` | End-to-end request latency |
-| `phase2_used` | Whether Phase 2 prefill was used |
+| `phase2_used` | Whether Phase 2 recovery was used |
 | `phase2_failed` | Whether Phase 2 failed and fallback was used |
 
 ## 9. Generate Reports

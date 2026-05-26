@@ -2,12 +2,15 @@
 
 from thought_brake.config import EarlyStopConfig
 from thought_brake.detectors import (
+    BOCPDDetector,
     BudgetDetector,
     CompressionDetector,
     KeywordDetector,
     NGramDetector,
     NoStopDetector,
+    OnlineChangePoint,
     SemanticDetector,
+    bocpd_features,
     build_detector,
     compression_ratio,
     lz77_factor_count,
@@ -50,6 +53,7 @@ def test_build_detector_from_config() -> None:
     assert isinstance(build_detector(EarlyStopConfig(detector="ngram")), NGramDetector)
     assert isinstance(build_detector(EarlyStopConfig(detector="keyword")), KeywordDetector)
     assert isinstance(build_detector(EarlyStopConfig(detector="semantic")), SemanticDetector)
+    assert isinstance(build_detector(EarlyStopConfig(detector="bocpd")), BOCPDDetector)
 
 
 def test_compression_signals_drop_for_repetitive_text() -> None:
@@ -264,3 +268,75 @@ def test_semantic_detector_stops_on_semantic_repetition() -> None:
         stopped = detector.update(piece, total).should_stop
 
     assert stopped
+
+
+def test_bocpd_features_score_repetitive_text_higher_than_diverse_text() -> None:
+    cfg = EarlyStopConfig(detector="bocpd")
+    history = "分析题目条件，建立关系，逐步推导，检查候选答案。"
+    diverse = "接着根据新的约束计算比例，并比较不同候选项。"
+    repetitive = "答案是水。等等，让我再想想。答案是水。等等，让我再想想。"
+
+    diverse_features = bocpd_features(diverse, history, conclusion_seen=False, config=cfg)
+    repetitive_features = bocpd_features(
+        repetitive,
+        history + repetitive,
+        conclusion_seen=True,
+        config=cfg,
+    )
+
+    assert repetitive_features.low_value_score > diverse_features.low_value_score
+    assert repetitive_features.conclusion_signal == 1.0
+
+
+def test_online_change_point_reacts_to_mean_shift() -> None:
+    detector = OnlineChangePoint(
+        hazard_lambda=20,
+        max_run_length=16,
+        observation_sigma=0.08,
+        prior_mean=0.5,
+        prior_sigma=0.35,
+    )
+
+    steady_states = [detector.update(0.15) for _ in range(8)]
+    shifted = detector.update(0.85)
+
+    assert steady_states[-1].map_run_length > 1
+    assert shifted.change_prob > steady_states[-1].change_prob
+    assert abs(sum(shifted.run_length_probs) - 1.0) < 1e-9
+
+
+def test_bocpd_detector_stops_after_conclusion_and_low_value_shift() -> None:
+    cfg = EarlyStopConfig(
+        detector="bocpd",
+        soft_budget=40,
+        hard_limit=10_000,
+        bocpd_window_chars=20,
+        bocpd_min_windows=2,
+        bocpd_hazard_lambda=20,
+        bocpd_stop_prob=0.2,
+        bocpd_low_value_threshold=0.25,
+        bocpd_observation_sigma=0.08,
+    )
+    detector = BOCPDDetector(cfg)
+
+    total = 0
+    stopped = False
+    for piece in [
+        "先分析题目条件然后建立约束关系。",
+        "根据约束推导候选答案并验证。",
+        "因此答案是水。等等让我再想想。",
+        "答案是水等等让我再想想答案是水。",
+    ]:
+        total += len(piece)
+        stopped = stopped or detector.update(piece, total).should_stop
+
+    assert stopped
+
+
+def test_bocpd_detector_hard_limit() -> None:
+    detector = BOCPDDetector(EarlyStopConfig(detector="bocpd", hard_limit=20))
+
+    decision = detector.update("a" * 25, 25)
+
+    assert decision.should_stop
+    assert decision.reason == StopReason.HARD

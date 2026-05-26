@@ -3,7 +3,15 @@ from enum import StrEnum
 from typing import Any, Literal
 
 ChatMessage = dict[str, Any]
-DetectorName = Literal["budget", "compression", "keyword", "ngram", "semantic", "none"]
+DetectorName = Literal[
+    "budget",
+    "compression",
+    "keyword",
+    "ngram",
+    "semantic",
+    "bocpd",
+    "none",
+]
 Phase2Mode = Literal["prefill", "direct"]
 
 

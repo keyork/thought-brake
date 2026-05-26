@@ -52,10 +52,10 @@ def _env_float(name: str, default: float) -> float:
 
 def _env_detector(name: str, default: DetectorName) -> DetectorName:
     raw = _env_str(name, default)
-    if raw in {"budget", "compression", "keyword", "ngram", "semantic", "none"}:
+    if raw in {"budget", "compression", "keyword", "ngram", "semantic", "bocpd", "none"}:
         return cast(DetectorName, raw)
     raise ValueError(
-        f"{name} must be one of: budget, compression, keyword, ngram, semantic, none"
+        f"{name} must be one of: budget, compression, keyword, ngram, semantic, bocpd, none"
     )
 
 
@@ -101,6 +101,21 @@ class EarlyStopConfig:
     semantic_jaccard_threshold: float = 0.35
     semantic_consecutive_windows: int = 2
     semantic_min_words: int = 5
+    bocpd_window_chars: int = 200
+    bocpd_min_windows: int = 4
+    bocpd_max_run_length: int = 64
+    bocpd_hazard_lambda: float = 12.0
+    bocpd_stop_prob: float = 0.65
+    bocpd_recent_run_threshold: int = 1
+    bocpd_low_value_threshold: float = 0.55
+    bocpd_observation_sigma: float = 0.12
+    bocpd_prior_mean: float = 0.5
+    bocpd_prior_sigma: float = 0.35
+    bocpd_compression_weight: float = 0.30
+    bocpd_lz_weight: float = 0.25
+    bocpd_ngram_weight: float = 0.20
+    bocpd_keyword_weight: float = 0.15
+    bocpd_conclusion_weight: float = 0.10
     finalize_hint: str = "\n\n好，已经想清楚了，直接给出最终答案。"
     reasoning_start_tag: str = "<think>\n"
     reasoning_end_tag: str = "\n</think>\n\n"
@@ -206,6 +221,57 @@ class EarlyStopConfig:
             ),
             semantic_min_words=_env_int(
                 "THOUGHT_BRAKE_SEMANTIC_MIN_WORDS", base.semantic_min_words
+            ),
+            bocpd_window_chars=_env_int(
+                "THOUGHT_BRAKE_BOCPD_WINDOW_CHARS", base.bocpd_window_chars
+            ),
+            bocpd_min_windows=_env_int(
+                "THOUGHT_BRAKE_BOCPD_MIN_WINDOWS", base.bocpd_min_windows
+            ),
+            bocpd_max_run_length=_env_int(
+                "THOUGHT_BRAKE_BOCPD_MAX_RUN_LENGTH", base.bocpd_max_run_length
+            ),
+            bocpd_hazard_lambda=_env_float(
+                "THOUGHT_BRAKE_BOCPD_HAZARD_LAMBDA", base.bocpd_hazard_lambda
+            ),
+            bocpd_stop_prob=_env_float(
+                "THOUGHT_BRAKE_BOCPD_STOP_PROB", base.bocpd_stop_prob
+            ),
+            bocpd_recent_run_threshold=_env_int(
+                "THOUGHT_BRAKE_BOCPD_RECENT_RUN_THRESHOLD",
+                base.bocpd_recent_run_threshold,
+            ),
+            bocpd_low_value_threshold=_env_float(
+                "THOUGHT_BRAKE_BOCPD_LOW_VALUE_THRESHOLD",
+                base.bocpd_low_value_threshold,
+            ),
+            bocpd_observation_sigma=_env_float(
+                "THOUGHT_BRAKE_BOCPD_OBSERVATION_SIGMA",
+                base.bocpd_observation_sigma,
+            ),
+            bocpd_prior_mean=_env_float(
+                "THOUGHT_BRAKE_BOCPD_PRIOR_MEAN", base.bocpd_prior_mean
+            ),
+            bocpd_prior_sigma=_env_float(
+                "THOUGHT_BRAKE_BOCPD_PRIOR_SIGMA", base.bocpd_prior_sigma
+            ),
+            bocpd_compression_weight=_env_float(
+                "THOUGHT_BRAKE_BOCPD_COMPRESSION_WEIGHT",
+                base.bocpd_compression_weight,
+            ),
+            bocpd_lz_weight=_env_float(
+                "THOUGHT_BRAKE_BOCPD_LZ_WEIGHT", base.bocpd_lz_weight
+            ),
+            bocpd_ngram_weight=_env_float(
+                "THOUGHT_BRAKE_BOCPD_NGRAM_WEIGHT", base.bocpd_ngram_weight
+            ),
+            bocpd_keyword_weight=_env_float(
+                "THOUGHT_BRAKE_BOCPD_KEYWORD_WEIGHT",
+                base.bocpd_keyword_weight,
+            ),
+            bocpd_conclusion_weight=_env_float(
+                "THOUGHT_BRAKE_BOCPD_CONCLUSION_WEIGHT",
+                base.bocpd_conclusion_weight,
             ),
             finalize_hint=_env_str("THOUGHT_BRAKE_FINALIZE_HINT", base.finalize_hint),
             reasoning_start_tag=_env_str(

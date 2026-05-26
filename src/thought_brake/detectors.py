@@ -5,6 +5,7 @@ streams in and decide whether Phase 1 should stop.
 """
 
 import gzip
+import math
 import re
 from dataclasses import dataclass
 from typing import Protocol
@@ -18,6 +19,23 @@ class StopDecision:
     should_stop: bool
     reason: StopReason = StopReason.NATURAL
     detail: str = ""
+
+
+@dataclass(frozen=True)
+class BOCPDFeatures:
+    compression_signal: float
+    lz_signal: float
+    ngram_overlap: float
+    keyword_signal: float
+    conclusion_signal: float
+    low_value_score: float
+
+
+@dataclass(frozen=True)
+class ChangePointState:
+    change_prob: float
+    map_run_length: int
+    run_length_probs: tuple[float, ...]
 
 
 class ReasoningDetector(Protocol):
@@ -96,6 +114,16 @@ def lz77_factor_count(text: str) -> int:
     return factors
 
 
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _extract_char_ngrams(text: str, ngram_size: int) -> set[str]:
+    if len(text) < ngram_size:
+        return set()
+    return {text[i : i + ngram_size] for i in range(len(text) - ngram_size + 1)}
+
+
 class CompressionDetector:
     """Layer 1 compression detector using CRD and relative LZ factor rate."""
 
@@ -165,9 +193,7 @@ class NGramDetector:
         self._trigger_count = 0
 
     def _extract_ngrams(self, text: str) -> set[str]:
-        if len(text) < self._ngram_size:
-            return set()
-        return {text[i : i + self._ngram_size] for i in range(len(text) - self._ngram_size + 1)}
+        return _extract_char_ngrams(text, self._ngram_size)
 
     def update(self, piece: str, total_chars: int) -> StopDecision:
         if total_chars >= self.config.hard_limit:
@@ -391,6 +417,286 @@ class SemanticDetector:
         )
 
 
+def bocpd_features(
+    window: str,
+    history: str,
+    conclusion_seen: bool,
+    config: EarlyStopConfig,
+) -> BOCPDFeatures:
+    """Return low-value reasoning features for one BOCPD observation window."""
+    compression_signal = _clamp01(1.0 - compression_ratio(window))
+    lz_rate = lz77_factor_count(window) / max(1, len(window))
+    lz_signal = _clamp01(1.0 - (lz_rate / 0.5))
+
+    recent_ngrams = _extract_char_ngrams(window, config.ngram_size)
+    history_ngrams = _extract_char_ngrams(history, config.ngram_size)
+    if recent_ngrams and history_ngrams:
+        ngram_overlap = len(recent_ngrams & history_ngrams) / len(recent_ngrams)
+    else:
+        ngram_overlap = 0.0
+
+    hedge_count = sum(1 for pat in _HEDGE_PATTERNS if pat.search(window))
+    keyword_signal = _clamp01(hedge_count / max(1.0, len(window) / 50))
+    conclusion_signal = 1.0 if conclusion_seen else 0.0
+
+    weighted_sum = (
+        config.bocpd_compression_weight * compression_signal
+        + config.bocpd_lz_weight * lz_signal
+        + config.bocpd_ngram_weight * ngram_overlap
+        + config.bocpd_keyword_weight * keyword_signal
+        + config.bocpd_conclusion_weight * conclusion_signal
+    )
+    weight_total = (
+        config.bocpd_compression_weight
+        + config.bocpd_lz_weight
+        + config.bocpd_ngram_weight
+        + config.bocpd_keyword_weight
+        + config.bocpd_conclusion_weight
+    )
+    low_value_score = weighted_sum / max(weight_total, 1e-9)
+
+    return BOCPDFeatures(
+        compression_signal=compression_signal,
+        lz_signal=lz_signal,
+        ngram_overlap=ngram_overlap,
+        keyword_signal=keyword_signal,
+        conclusion_signal=conclusion_signal,
+        low_value_score=low_value_score,
+    )
+
+
+@dataclass(frozen=True)
+class _RunHypothesis:
+    run_length: int
+    probability: float
+    mean: float
+    count: int
+
+
+class OnlineChangePoint:
+    """Small online change-point core used by BOCPDDetector.
+
+    This is a lightweight BOCPD-style approximation for bounded run lengths. It
+    keeps a distribution over run lengths and uses a broad prior predictive for
+    newly started segments.
+    """
+
+    def __init__(
+        self,
+        *,
+        hazard_lambda: float,
+        max_run_length: int,
+        observation_sigma: float,
+        prior_mean: float,
+        prior_sigma: float,
+    ) -> None:
+        self.hazard = _clamp01(1.0 / max(hazard_lambda, 1e-9))
+        self.max_run_length = max_run_length
+        self.observation_sigma = max(observation_sigma, 1e-6)
+        self.prior_mean = prior_mean
+        self.prior_sigma = max(prior_sigma, self.observation_sigma)
+        self._hypotheses: list[_RunHypothesis] = [
+            _RunHypothesis(run_length=0, probability=1.0, mean=prior_mean, count=0)
+        ]
+
+    def update(self, value: float) -> ChangePointState:
+        value = _clamp01(value)
+        candidates: dict[int, _RunHypothesis] = {}
+        change_probability = 0.0
+
+        for hypothesis in self._hypotheses:
+            growth_likelihood = self._normal_pdf(
+                value,
+                hypothesis.mean,
+                self.observation_sigma,
+            )
+            change_likelihood = self._normal_pdf(value, self.prior_mean, self.prior_sigma)
+
+            growth_prob = hypothesis.probability * (1.0 - self.hazard) * growth_likelihood
+            growth_run = min(hypothesis.run_length + 1, self.max_run_length)
+            growth_mean = (
+                value
+                if hypothesis.count == 0
+                else (hypothesis.mean * hypothesis.count + value) / (hypothesis.count + 1)
+            )
+            self._merge_candidate(
+                candidates,
+                _RunHypothesis(
+                    run_length=growth_run,
+                    probability=growth_prob,
+                    mean=growth_mean,
+                    count=min(hypothesis.count + 1, self.max_run_length),
+                ),
+            )
+
+            change_prob = hypothesis.probability * self.hazard * change_likelihood
+            change_probability += change_prob
+            self._merge_candidate(
+                candidates,
+                _RunHypothesis(
+                    run_length=0,
+                    probability=change_prob,
+                    mean=value,
+                    count=1,
+                ),
+            )
+
+        total = sum(h.probability for h in candidates.values())
+        if total <= 0:
+            self._hypotheses = [
+                _RunHypothesis(run_length=0, probability=1.0, mean=value, count=1)
+            ]
+            return ChangePointState(
+                change_prob=1.0,
+                map_run_length=0,
+                run_length_probs=(1.0,),
+            )
+
+        self._hypotheses = sorted(
+            (
+                _RunHypothesis(
+                    run_length=h.run_length,
+                    probability=h.probability / total,
+                    mean=h.mean,
+                    count=h.count,
+                )
+                for h in candidates.values()
+            ),
+            key=lambda h: h.probability,
+            reverse=True,
+        )[: self.max_run_length]
+
+        normalized_total = sum(h.probability for h in self._hypotheses)
+        self._hypotheses = [
+            _RunHypothesis(
+                run_length=h.run_length,
+                probability=h.probability / normalized_total,
+                mean=h.mean,
+                count=h.count,
+            )
+            for h in self._hypotheses
+        ]
+        map_run_length = max(self._hypotheses, key=lambda h: h.probability).run_length
+        normalized_change_prob = change_probability / total
+
+        return ChangePointState(
+            change_prob=_clamp01(normalized_change_prob),
+            map_run_length=map_run_length,
+            run_length_probs=tuple(h.probability for h in self._hypotheses),
+        )
+
+    @staticmethod
+    def _normal_pdf(value: float, mean: float, sigma: float) -> float:
+        z = (value - mean) / sigma
+        return math.exp(-0.5 * z * z) / (sigma * math.sqrt(2.0 * math.pi))
+
+    @staticmethod
+    def _merge_candidate(
+        candidates: dict[int, _RunHypothesis], candidate: _RunHypothesis
+    ) -> None:
+        existing = candidates.get(candidate.run_length)
+        if existing is None:
+            candidates[candidate.run_length] = candidate
+            return
+
+        probability = existing.probability + candidate.probability
+        if probability <= 0:
+            return
+        mean = (
+            existing.mean * existing.probability
+            + candidate.mean * candidate.probability
+        ) / probability
+        candidates[candidate.run_length] = _RunHypothesis(
+            run_length=candidate.run_length,
+            probability=probability,
+            mean=mean,
+            count=max(existing.count, candidate.count),
+        )
+
+
+class BOCPDDetector:
+    """Layer 2 detector using online change-point detection over text features."""
+
+    name: DetectorName = "bocpd"
+
+    def __init__(self, config: EarlyStopConfig) -> None:
+        self.config = config
+        self._buf: list[str] = []
+        self._processed_chars = 0
+        self._windows_seen = 0
+        self._found_conclusion = False
+        self._state = ChangePointState(
+            change_prob=0.0,
+            map_run_length=0,
+            run_length_probs=(1.0,),
+        )
+        self._change_point = OnlineChangePoint(
+            hazard_lambda=config.bocpd_hazard_lambda,
+            max_run_length=config.bocpd_max_run_length,
+            observation_sigma=config.bocpd_observation_sigma,
+            prior_mean=config.bocpd_prior_mean,
+            prior_sigma=config.bocpd_prior_sigma,
+        )
+
+    def update(self, piece: str, total_chars: int) -> StopDecision:
+        if total_chars >= self.config.hard_limit:
+            return StopDecision(
+                should_stop=True,
+                reason=StopReason.HARD,
+                detail=f"hard_limit={self.config.hard_limit}",
+            )
+
+        self._buf.append(piece)
+        if not self._found_conclusion and any(pat.search(piece) for pat in _CONCLUSION_PATTERNS):
+            self._found_conclusion = True
+
+        text = "".join(self._buf)
+        window_chars = self.config.bocpd_window_chars
+        last_features: BOCPDFeatures | None = None
+        while len(text) - self._processed_chars >= window_chars:
+            window = text[self._processed_chars : self._processed_chars + window_chars]
+            history = text[: self._processed_chars]
+            last_features = bocpd_features(
+                window,
+                history,
+                self._found_conclusion,
+                self.config,
+            )
+            self._state = self._change_point.update(last_features.low_value_score)
+            self._processed_chars += window_chars
+            self._windows_seen += 1
+
+        if last_features is None:
+            return StopDecision(
+                should_stop=False,
+                detail=f"bocpd_collecting chars={len(text) - self._processed_chars}",
+            )
+
+        detail = (
+            f"bocpd p_change={self._state.change_prob:.3f} "
+            f"z={last_features.low_value_score:.3f} r_map={self._state.map_run_length}"
+        )
+        if self._windows_seen < self.config.bocpd_min_windows:
+            return StopDecision(should_stop=False, detail=f"{detail} warmup")
+
+        recent_change = self._state.map_run_length <= self.config.bocpd_recent_run_threshold
+        should_stop = (
+            total_chars >= self.config.soft_budget
+            and self._found_conclusion
+            and recent_change
+            and self._state.change_prob >= self.config.bocpd_stop_prob
+            and last_features.low_value_score >= self.config.bocpd_low_value_threshold
+        )
+        if should_stop:
+            return StopDecision(
+                should_stop=True,
+                reason=StopReason.SOFT,
+                detail=detail,
+            )
+
+        return StopDecision(should_stop=False, detail=detail)
+
+
 def build_detector(config: EarlyStopConfig) -> ReasoningDetector:
     if config.detector == "none":
         return NoStopDetector()
@@ -404,4 +710,6 @@ def build_detector(config: EarlyStopConfig) -> ReasoningDetector:
         return KeywordDetector(config)
     if config.detector == "semantic":
         return SemanticDetector(config)
+    if config.detector == "bocpd":
+        return BOCPDDetector(config)
     raise ValueError(f"Unknown detector: {config.detector}")

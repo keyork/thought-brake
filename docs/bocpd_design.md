@@ -2,7 +2,7 @@
 
 日期：2026-05-25
 
-状态：v0.2 设计草案，尚未实现
+状态：v0.2 设计草案；最小代码骨架已实现，真实 API probe 尚未运行
 
 ## 1. 目标
 
@@ -323,9 +323,9 @@ bocpd p_change=0.72 z=0.61 r_map=0
 
 ## 8. 实现计划
 
-### Step 1：Feature Extraction
+### Step 1：Feature Extraction ✅
 
-先实现纯函数：
+已实现纯函数：
 
 ```python
 def bocpd_features(text: str, history: str, conclusion_seen: bool) -> BOCPDFeatures:
@@ -338,9 +338,9 @@ def bocpd_features(text: str, history: str, conclusion_seen: bool) -> BOCPDFeatu
 - diverse text 的 low-value score 更低
 - conclusion pattern 能被记录
 
-### Step 2：BOCPD Core
+### Step 2：BOCPD Core ✅
 
-实现一个独立小类，不依赖 detector：
+已实现一个独立小类，不依赖 detector：
 
 ```python
 class OnlineChangePoint:
@@ -355,9 +355,9 @@ class OnlineChangePoint:
 - posterior 每步归一化
 - max run length 生效
 
-### Step 3：Detector Wrapper
+### Step 3：Detector Wrapper ✅
 
-实现 `BOCPDDetector`，接入：
+已实现 `BOCPDDetector`，接入：
 
 - hard limit
 - warmup
@@ -365,7 +365,7 @@ class OnlineChangePoint:
 - stop rule
 - detail string
 
-### Step 4：Runner Support
+### Step 4：Runner Support ✅
 
 确保：
 
@@ -381,7 +381,11 @@ uv run python experiments/runner.py \
 
 可以直接运行。
 
-### Step 5：Report Support
+### Step 5：Probe Run ⏳
+
+下一步需要跑 20-50 题真实 API probe，验证触发是否稳定。
+
+### Step 6：Report Support
 
 `report_full_main.py` 当前聚焦 full budget/compression/keyword 文件。BOCPD 初期建议新建 focused report：
 
@@ -478,15 +482,15 @@ BOCPD 值得进入 v0.2 mainline 的条件：
 
 代码：
 
-- `BOCPDDetector`
-- `OnlineChangePoint`
-- `bocpd_features`
-- config/env support
-- tests
+- `BOCPDDetector` ✅
+- `OnlineChangePoint` ✅
+- `bocpd_features` ✅
+- config/env support ✅
+- tests ✅
 
 实验：
 
-- 20-50 题 probe
+- 20-50 题 probe ⏳
 - 与 v0.1 default 对比
 - trigger/failure examples
 

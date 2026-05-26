@@ -190,5 +190,6 @@ balanced-aggressive: compression@300
 
 1. 创建 GitHub Release，内容使用 `docs/release_v0_1.md`
 2. 评审 `docs/bocpd_design.md`，确认 v0.2 的最小实现范围
-3. 实现 BOCPD feature extraction 和 `OnlineChangePoint` core
-4. 接入 `BOCPDDetector` 并跑 20-50 题 probe
+3. 实现 BOCPD feature extraction 和 `OnlineChangePoint` core ✅
+4. 接入 `BOCPDDetector` ✅
+5. 跑 20-50 题 probe

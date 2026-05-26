@@ -49,7 +49,7 @@ v0.1 的核心定位：
 
 ## 工作原理
 
-`thought-brake` 不是单一的固定 budget 截断器，而是一套“流式观测 → 早停决策 → 答案收束”的客户端控制框架。当前实现已经支持 budget、compression、ngram、keyword、semantic 多种 detector；v0.1 聚焦可解释、可复现的 Layer 1 literal text detectors，v0.2 会推进 BOCPD / change-point detector 来减少 magic threshold。
+`thought-brake` 不是单一的固定 budget 截断器，而是一套“流式观测 → 早停决策 → 答案收束”的客户端控制框架。当前实现已经支持 budget、compression、ngram、keyword、semantic 多种 detector，并已加入实验性的 `bocpd` detector；v0.1 聚焦可解释、可复现的 Layer 1 literal text detectors，v0.2 会推进 BOCPD / change-point detector 来减少 magic threshold。
 
 ### 1. 两阶段执行框架
 
@@ -160,6 +160,7 @@ Reasoning model overthinking 的缓解方法可以分为四类：
 | `ngram` | n-gram literal overlap，用于捕捉字面重复 |
 | `keyword` | 犹豫短语密度、结论后继续推理等信号，当前保守策略使用 `keyword@1000` |
 | `semantic` | 内容词 Jaccard 相似度，用于捕捉粗粒度重述 |
+| `bocpd` | 实验性 BOCPD / change-point detector，用低维文本特征检测推理阶段变化 |
 
 Detector 接口：
 
@@ -323,7 +324,7 @@ uv run mypy src            # --strict
 src/thought_brake/        核心库
   client.py               对外 Client，Phase 1/2 编排
   config.py               EarlyStopConfig dataclass
-  detectors.py            可插拔 detector（none/budget/compression/ngram/keyword/semantic）
+  detectors.py            可插拔 detector（none/budget/compression/ngram/keyword/semantic/bocpd）
   _monitor.py             流式 reasoning 监控
   _prefill.py             Phase 2 direct + prefill 模式
   types.py                类型定义

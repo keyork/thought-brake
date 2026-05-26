@@ -348,13 +348,20 @@ task-specific hard limit
 - local embedding model
 - embedding API
 
-### 5. BOCPD
+### 5. BOCPD / Layer 2
 
-未实现。
+v0.1 tag 之后已经补上最小代码骨架：
+
+- `bocpd_features`
+- `OnlineChangePoint`
+- `BOCPDDetector`
+- config / env support
+- runner detector choice
+- 单测覆盖
 
 目前看 v0.1 优先级较低，因为 compression/keyword 已经能支撑当前 main claim。
 
-但 BOCPD 仍然值得作为 v0.2 明确推进，因为它对应最初“数学上更美、减少 magic threshold”的目标。当前 `compression@1000` / `compression@300` 仍然有 `@1000` / `@300`、压缩阈值、连续窗口数等参数；BOCPD 的价值在于把停止决策推进到变化点检测和 posterior odds，而不是继续手调阈值。
+但 BOCPD 仍然只是 v0.2 起点，尚未跑真实 API probe。它对应最初“数学上更美、减少 magic threshold”的目标。当前 `compression@1000` / `compression@300` 仍然有 `@1000` / `@300`、压缩阈值、连续窗口数等参数；BOCPD 的价值在于把停止决策推进到变化点检测和 posterior odds，而不是继续手调阈值。
 
 ### 6. Provider-specific Tokenizer / Billing-grade Cost
 
